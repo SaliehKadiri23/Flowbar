@@ -1,1 +1,26 @@
-  
+{
+  "manifest_version": 3,
+  "name": "Flowbar",
+  "version": "0.1.0",
+  "description": "A Calm Engine for focus - Your Flow State Sanctuary",
+  "permissions": [
+    "storage",
+    "alarms",
+    "scripting",
+    "tabs",
+    "activeTab"
+  ],
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Flowbar"
+  },
+  "options_page": "options/options.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
