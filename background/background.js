@@ -2,38 +2,64 @@
 
 /**
  * Gets the current timer state from chrome.storage.sync
- * @returns {Promise<Object>} The timer state object containing timerState and endTime
+ * @returns {Promise<Object>} The timer state object containing timerState, endTime, and timeLeft
  */
 async function getTimerState() {
   try {
-    const result = await chrome.storage.sync.get(['timerState', 'endTime']);
+    const result = await chrome.storage.sync.get(['timerState', 'originalTimerType', 'endTime', 'timeLeft', 'focusDuration', 'breakDuration']);
+    
+    // Set default durations if not found
+    const focusDuration = result.focusDuration || 25 * 60; // 25 minutes in seconds
+    const breakDuration = result.breakDuration || 5 * 60;  // 5 minutes in seconds
+    
+    // Calculate timeLeft if endTime exists
+    let timeLeft = result.timeLeft || focusDuration;
+    if (result.endTime && (result.timerState === 'focus' || result.timerState === 'break')) {
+      const now = Date.now();
+      const remainingMs = result.endTime - now;
+      const remainingSecs = Math.max(0, Math.floor(remainingMs / 1000));
+      timeLeft = remainingSecs;
+    }
+    
     // Return the timer state with defaults if not set
     return {
-      timerState: result.timerState || 'stopped', // Possible states: 'stopped', 'focus', 'break'
-      endTime: result.endTime || null
+      timerState: result.timerState || 'stopped', // Possible states: 'stopped', 'focus', 'break', 'paused'
+      originalTimerType: result.originalTimerType || null, // Original timer type when paused
+      endTime: result.endTime || null,
+      timeLeft: timeLeft,
+      focusDuration: focusDuration,
+      breakDuration: breakDuration
     };
   } catch (error) {
     console.error('Flowbar background.js error:', error);
     // Return default state in case of error
     return {
       timerState: 'stopped',
-      endTime: null
+      originalTimerType: null,
+      endTime: null,
+      timeLeft: 25 * 60, // Default to 25 minutes
+      focusDuration: 25 * 60,
+      breakDuration: 5 * 60
     };
   }
 }
 
 /**
  * Sets the timer state in chrome.storage.sync
- * @param {Object} state - The state object containing timerState and endTime
- * @param {string} state.timerState - The current state of the timer (e.g., 'stopped', 'focus', 'break')
+ * @param {Object} state - The state object containing timerState, originalTimerType, endTime, and timeLeft
+ * @param {string} state.timerState - The current state of the timer (e.g., 'stopped', 'focus', 'break', 'paused')
+ * @param {string|null} state.originalTimerType - The original timer type when paused ('focus' or 'break')
  * @param {number|null} state.endTime - The Unix timestamp for when the timer ends, or null
+ * @param {number} state.timeLeft - Time remaining in seconds
  * @returns {Promise<void>}
  */
 async function setTimerState(state) {
   try {
     await chrome.storage.sync.set({
       timerState: state.timerState,
-      endTime: state.endTime
+      originalTimerType: state.originalTimerType,
+      endTime: state.endTime,
+      timeLeft: state.timeLeft
     });
   } catch (error) {
     console.error('Flowbar background.js error:', error);
@@ -42,18 +68,23 @@ async function setTimerState(state) {
 
 /**
  * Starts a timer with the specified duration and state
- * @param {number} duration - Duration in minutes
+ * @param {number} durationInMinutes - Duration in minutes
  * @param {'focus'|'break'} state - The state to start ('focus' or 'break')
  * @returns {Promise<void>}
  */
-async function startTimer(duration, state) {
+async function startTimer(durationInMinutes, state) {
   try {
     // Calculate the end time (current time + duration in milliseconds)
     const now = Date.now();
-    const endTime = now + (duration * 60 * 1000); // Convert minutes to milliseconds
+    const endTime = now + (durationInMinutes * 60 * 1000); // Convert minutes to milliseconds
+    const timeLeft = durationInMinutes * 60; // Duration in seconds
 
     // Set the timer state
-    await setTimerState({ timerState: state, endTime });
+    await setTimerState({ 
+      timerState: state, 
+      endTime: endTime,
+      timeLeft: timeLeft
+    });
 
     // Create an alarm that will fire at the end time
     await chrome.alarms.create(`timer_${state}`, {
@@ -73,12 +104,241 @@ async function stopTimer() {
     // Clear any existing alarms
     await chrome.alarms.clearAll();
 
-    // Reset the timer state to stopped
-    await setTimerState({ timerState: 'stopped', endTime: null });
+    // Get the configured durations to reset to initial values
+    const result = await chrome.storage.sync.get(['focusDuration', 'breakDuration']);
+    const focusDuration = result.focusDuration || 25 * 60; // 25 minutes in seconds
+    
+    // Reset the timer state to stopped with initial time
+    await setTimerState({ 
+      timerState: 'stopped', 
+      originalTimerType: null,
+      endTime: null,
+      timeLeft: focusDuration // Reset to initial focus duration
+    });
   } catch (error) {
     console.error('Flowbar background.js error:', error);
   }
 }
+
+// Update timer display periodically
+let timerInterval = null;
+
+/**
+ * Starts the periodic update of timeLeft in storage
+ */
+function startTimerUpdates() {
+  // Clear any existing interval
+  if (timerInterval) {
+    clearInterval(timerInterval);
+  }
+  
+  // Update every second
+  timerInterval = setInterval(async () => {
+    try {
+      const state = await getTimerState();
+      
+      if (state.timerState === 'focus' || state.timerState === 'break') {
+        if (state.endTime) {
+          const now = Date.now();
+          const remainingMs = Math.max(0, state.endTime - now);
+          const remainingSecs = Math.floor(remainingMs / 1000);
+          
+          // Update timeLeft in storage
+          await setTimerState({
+            timerState: state.timerState,
+            endTime: state.endTime,
+            timeLeft: remainingSecs
+          });
+          
+          // If timer has reached 0, the alarm should handle the transition
+          if (remainingSecs <= 0) {
+            // Wait a moment for the alarm to process, then potentially clear the interval
+            setTimeout(async () => {
+              const newState = await getTimerState();
+              if (newState.timerState === 'stopped') {
+                clearInterval(timerInterval);
+                timerInterval = null;
+              }
+            }, 100);
+          }
+        }
+      } else {
+        // If not in focus or break state, stop the interval
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    } catch (error) {
+      console.error('Flowbar background.js error updating timer:', error);
+    }
+  }, 1000);
+}
+
+// Message listener to handle requests from popup
+chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+  try {
+    if (request.action === 'startTimer') {
+      // Get current timer state
+      const currentState = await getTimerState();
+      
+      if (currentState.timerState === 'stopped') {
+        // Start a new focus timer using configured duration
+        const durationInMinutes = currentState.focusDuration / 60; // Convert seconds to minutes
+        await startTimer(durationInMinutes, 'focus');
+        
+        // Start updating the timer display
+        startTimerUpdates();
+      } else if (currentState.timerState === 'paused') {
+        // If paused, resume the paused timer (this is now handled by resumeTimer action)
+        return Promise.resolve({ success: false, error: "Use resumeTimer action to resume a paused timer" });
+      } else {
+        // If running, pause the current timer - calculate and preserve the current timeLeft
+        // Calculate the actual remaining time at the moment of pause
+        let currentRemainingTime = currentState.timeLeft;
+        if (currentState.endTime) {
+          const now = Date.now();
+          const remainingMs = Math.max(0, currentState.endTime - now);
+          currentRemainingTime = Math.floor(remainingMs / 1000);
+        }
+        
+        await setTimerState({ 
+          timerState: 'paused', 
+          originalTimerType: currentState.timerState, // Preserve the original timer type (focus/break)
+          endTime: currentState.endTime, // Keep the original endTime for potential resume
+          timeLeft: currentRemainingTime // Preserve the exact remaining time
+        });
+        await chrome.alarms.clearAll(); // Clear active alarms when paused
+        
+        // Stop the timer updates
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+      }
+      
+      // Send response back to popup (using async/await pattern)
+      return Promise.resolve({ success: true });
+    } else if (request.action === 'pauseTimer') {
+      // Pause the current timer - calculate and preserve the current timeLeft
+      const currentState = await getTimerState();
+      
+      if (currentState.timerState === 'focus' || currentState.timerState === 'break') {
+        // Calculate the actual remaining time at the moment of pause
+        let currentRemainingTime = currentState.timeLeft;
+        if (currentState.endTime) {
+          const now = Date.now();
+          const remainingMs = Math.max(0, currentState.endTime - now);
+          currentRemainingTime = Math.floor(remainingMs / 1000);
+        }
+        
+        await setTimerState({ 
+          timerState: 'paused', // Set state to paused
+          originalTimerType: currentState.timerState, // Preserve the original timer type (focus/break)
+          endTime: currentState.endTime, // Keep the original endTime for potential resume
+          timeLeft: currentRemainingTime // Preserve the exact remaining time
+        });
+        await chrome.alarms.clearAll(); // Clear active alarms when paused
+        
+        // Stop the timer updates
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+      }
+      
+      // Send response back to popup
+      return Promise.resolve({ success: true });
+    } else if (request.action === 'resumeTimer') {
+      // Resume the paused timer
+      const currentState = await getTimerState();
+      
+      if (currentState.timerState === 'paused') {
+        // When resuming, calculate a new endTime based on the preserved timeLeft
+        const now = Date.now();
+        const newEndTime = now + (currentState.timeLeft * 1000); // Current time + remaining time from pause
+        
+        // Update the state to the original timer type and restart the alarm with the new end time
+        const timerType = currentState.originalTimerType || 'focus'; // Default to focus if not set
+        
+        await setTimerState({ 
+          timerState: timerType,
+          originalTimerType: null, // Clear the original timer type since we're now running
+          endTime: newEndTime, // New end time based on current time + preserved remaining time
+          timeLeft: currentState.timeLeft // Keep the preserved remaining time
+        });
+        
+        // Restart alarm with the new end time
+        await chrome.alarms.create(`timer_${timerType}`, {
+          when: newEndTime
+        });
+        
+        // Start updating the timer display
+        startTimerUpdates();
+      }
+      
+      // Send response back to popup
+      return Promise.resolve({ success: true });
+    } else if (request.action === 'resetTimer') {
+      // For resetTimer: fully reset the timer to initial state
+      // Clear any existing alarms
+      await chrome.alarms.clearAll();
+      
+      // Stop the timer updates
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      
+      // Get the configured durations to reset to initial values
+      const result = await chrome.storage.sync.get(['focusDuration']);
+      const focusDuration = result.focusDuration || 25 * 60; // 25 minutes in seconds
+      
+      // Reset the timer state to stopped with initial time
+      await setTimerState({ 
+        timerState: 'stopped', 
+        endTime: null,
+        timeLeft: focusDuration // Reset to initial focus duration
+      });
+      
+      // Send response back to popup
+      return Promise.resolve({ success: true });
+    } else if (request.action === 'stopTimer') {
+      // For stopTimer: just stop the current timer
+      await stopTimer();
+      
+      // Stop the timer updates
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      
+      // Send response back to popup
+      return Promise.resolve({ success: true });
+    }
+  } catch (error) {
+    console.error('Flowbar background.js error handling message:', error);
+    return Promise.resolve({ success: false, error: error.message });
+  }
+});
+
+// When extension starts, check if there's an active timer and resume updates if needed
+chrome.runtime.onStartup.addListener(async () => {
+  const state = await getTimerState();
+  if (state.timerState === 'focus' || state.timerState === 'break') {
+    startTimerUpdates();
+  }
+});
+
+// When extension is installed, set default durations
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.storage.sync.get(['focusDuration', 'breakDuration']).then((result) => {
+    if (!result.focusDuration) {
+      chrome.storage.sync.set({ focusDuration: 25 * 60 }); // 25 minutes in seconds
+    }
+    if (!result.breakDuration) {
+      chrome.storage.sync.set({ breakDuration: 5 * 60 }); // 5 minutes in seconds
+    }
+  });
+});
 
 // Alarm listener to handle timer transitions
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -88,26 +348,32 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
     // Determine the next state based on the current state
     let nextState;
-    let nextDuration;
+    let nextDurationSeconds;
 
     if (currentState.timerState === 'focus') {
-      // After focus, transition to break (default 5 minutes)
+      // After focus, transition to break using configured duration
       nextState = 'break';
-      // In a real implementation, we would get the break duration from options
-      nextDuration = 5; // Default break duration in minutes
+      nextDurationSeconds = currentState.breakDuration; // Duration in seconds
     } else if (currentState.timerState === 'break') {
-      // After break, transition back to focus (default 25 minutes)
+      // After break, transition back to focus using configured duration
       nextState = 'focus';
-      // In a real implementation, we would get the focus duration from options
-      nextDuration = 25; // Default focus duration in minutes
+      nextDurationSeconds = currentState.focusDuration; // Duration in seconds
     } else {
       // If in any other state, just stop
-      await setTimerState({ timerState: 'stopped', endTime: null });
+      await setTimerState({ 
+        timerState: 'stopped', 
+        originalTimerType: null,
+        endTime: null,
+        timeLeft: currentState.timeLeft // Preserve timeLeft
+      });
       return;
     }
 
-    // Start the next timer phase
-    await startTimer(nextDuration, nextState);
+    // Start the next timer phase (convert seconds to minutes for startTimer function)
+    await startTimer(nextDurationSeconds / 60, nextState);
+    
+    // Restart timer updates as the new timer has started
+    startTimerUpdates();
   } catch (error) {
     console.error('Flowbar background.js error in alarm listener:', error);
   }

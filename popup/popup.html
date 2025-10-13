@@ -1,2 +1,128 @@
-  
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flowbar - Focus Timer</title>
+    <style>
+      body {
+        width: 300px;
+        padding: 20px;
+        font-family: "Inter", system-ui, sans-serif;
+        margin: 0;
+        background-color: #f8f9fa;
+      }
 
+      .container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+      }
+
+      .timer-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        gap: 15px; /* Add some space between timer and reset button */
+      }
+
+      .timer-display {
+        font-size: 2.5rem;
+        font-weight: 600;
+        text-align: center;
+        min-height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .reset-icon {
+        background: #3498db;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.2s;
+        flex-shrink: 0; /* Prevent the button from shrinking */
+      }
+
+      .reset-icon:hover {
+        background-color: #2980b9;
+      }
+
+      .control-button {
+        padding: 12px 24px;
+        font-size: 1rem;
+        font-weight: 500;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        width: 100%;
+        transition: background-color 0.2s;
+      }
+
+      .start-button {
+        background-color: #2ecc71;
+        color: white;
+      }
+
+      .start-button:hover {
+        background-color: #27ae60;
+      }
+
+      .stop-button {
+        background-color: #e74c3c;
+        color: white;
+      }
+
+      .stop-button:hover {
+        background-color: #c0392b;
+      }
+
+      .settings-link {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        text-decoration: none;
+        color: #7f8c8d;
+        font-size: 1.2rem;
+        cursor: pointer;
+      }
+
+      .settings-link:hover {
+        color: #2c3e50;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Settings icon link -->
+      <a href="#" class="settings-link" id="settingsIcon" title="Settings">
+        ⚙️
+      </a>
+
+      <!-- Timer display with reset icon -->
+      <div class="timer-container">
+        <div class="timer-display" id="timerDisplay">25:00</div>
+        <button class="reset-icon" id="resetButton" title="Reset Timer">
+          ↻
+        </button>
+      </div>
+
+      <!-- Main Start/Pause/Resume button -->
+      <button class="control-button start-button" id="controlButton">
+        Start Focus
+      </button>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

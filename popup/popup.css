@@ -1,1 +1,205 @@
+/* Flowbar Popup Styles - Calm Engine UI */
+
+:root {
+  /* Calm Engine Color Scheme */
+  --focus-color: #2ecc71;      /* Focus State Color */
+  --break-color: #3498db;      /* Break State Color */
+  --wind-down-color: #e67e22;  /* Wind-Down State Color */
+  --background-color: #ffffff;
+  --text-color: #2c3e50;
+  --border-color: #ecf0f1;
+  --shadow-color: rgba(0, 0, 0, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 300px;
+  min-height: 200px;
+  padding: 20px;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  line-height: 1.5;
+  transition: background-color 0.3s ease;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  position: relative;
+}
+
+/* Timer Display */
+.timer-display {
+  font-size: 2.5rem;
+  font-weight: 600;
+  text-align: center;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  background-color: #f8f9fa;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+/* Focus State styling */
+body.focus .timer-display {
+  background-color: rgba(46, 204, 113, 0.1);
+  color: var(--focus-color);
+}
+
+/* Break State styling */
+body.break .timer-display {
+  background-color: rgba(52, 152, 219, 0.1);
+  color: var(--break-color);
+}
+
+/* Control Button */
+.control-button {
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px var(--shadow-color);
+}
+
+.control-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(52, 142, 219, 0.3);
+}
+
+.start-button {
+  background-color: var(--focus-color);
+  color: white;
+}
+
+.start-button:hover:not(:disabled) {
+  background-color: #27ae60;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.start-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.stop-button {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.stop-button:hover:not(:disabled) {
+  background-color: #c0392b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.stop-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.control-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Settings Icon */
+.settings-link {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  text-decoration: none;
+  color: #95a5a6;
+  font-size: 1.2rem;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.settings-link:hover {
+  color: var(--text-color);
+  background-color: #f8f9fa;
+  transform: scale(1.1);
+}
+
+/* State Indicators */
+.state-indicator {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.state-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #bdc3c7;
+  transition: background-color 0.3s ease;
+}
+
+.state-dot.focus {
+  background-color: var(--focus-color);
+}
+
+.state-dot.break {
+  background-color: var(--break-color);
+}
+
+/* Minimalist aesthetic elements */
+.divider {
+  width: 100%;
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 10px 0;
+}
+
+.status-text {
+  text-align: center;
+  font-size: 0.9rem;
+  color: #7f8c8d;
+  margin-top: 5px;
+}
+
+/* Smooth animations for state transitions */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.timer-display.pulse {
+  animation: pulse 1s ease-in-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 320px) {
+  body {
+    padding: 15px;
+  }
   
+  .timer-display {
+    font-size: 2rem;
+  }
+}
