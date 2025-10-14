@@ -45,6 +45,49 @@ async function setTimeData(timeData) {
 }
 
 /**
+ * Calculates the flow score for a specific domain
+ * @param {string} domain - The domain to calculate the score for
+ * @param {Object} timeData - The time tracking data object
+ * @returns {number} - The calculated flow score (0-100)
+ */
+async function calculateFlowScore(domain, timeData) {
+  try {
+    // Get all sessions for the specific domain
+    const domainSessions = timeData.sessionHistory.filter(session => session.domain === domain);
+    
+    // Calculate total focus time for this domain
+    const domainFocusTime = domainSessions.reduce((total, session) => total + session.duration, 0);
+    
+    // Calculate score based on focus time
+    // For example: 30+ minutes = 100%, 15-30 minutes = 80%, etc.
+    // This is a simple approach - can be enhanced with more sophisticated algorithms
+    
+    // Example scoring: based on time spent focused on the domain
+    const hours = domainFocusTime / 3600; // Convert to hours
+    
+    // Different thresholds for different types of domains
+    if (hours >= 3) {
+      return 100; // 3+ hours = maximum score
+    } else if (hours >= 2) {
+      return 85;  // 2-3 hours = high score
+    } else if (hours >= 1) {
+      return 70;  // 1-2 hours = good score
+    } else if (hours >= 0.5) {
+      return 55;  // 30-60 minutes = moderate score
+    } else if (hours >= 0.25) {
+      return 40;  // 15-30 minutes = low-medium score
+    } else if (hours > 0) {
+      return 25;  // < 15 minutes = low score
+    } else {
+      return 0;   // No time spent = 0 score
+    }
+  } catch (error) {
+    console.error('Flowbar background.js error calculating flow score:', error);
+    return 0;
+  }
+}
+
+/**
  * Updates the border color for all tabs
  * @param {string} color - The color to set the border (e.g., 'rgba(46, 204, 113, 0.3)' for focus, 'rgba(52, 152, 219, 0.3)' for break)
  * @returns {Promise<void>}
@@ -384,23 +427,20 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
           currentRemainingTime = Math.floor(remainingMs / 1000);
         }
         
-        // Log the paused session if it was a focus session
+        // Complete any ongoing session for the current domain
         if (currentState.timerState === 'focus') {
           const timeData = await getTimeData();
-          const sessionEndTime = now;
-          const elapsedFocusTime = currentState.focusDuration - currentState.timeLeft;
+          const ongoingSessionIndex = timeData.sessionHistory.findIndex(session => 
+            session.domain === currentDomain && 
+            session.type === 'focus' && 
+            !session.endTime // Incomplete session
+          );
           
-          // Create a session record for the partially completed session
-          const pausedSession = {
-            startTime: sessionEndTime - (elapsedFocusTime * 1000), // Convert to milliseconds
-            endTime: sessionEndTime,
-            duration: elapsedFocusTime,
-            type: 'focus',
-            domain: currentDomain || 'unknown'
-          };
-          
-          timeData.sessionHistory.push(pausedSession);
-          await setTimeData(timeData);
+          if (ongoingSessionIndex !== -1) {
+            // Complete the ongoing session
+            timeData.sessionHistory[ongoingSessionIndex].endTime = now;
+            await setTimeData(timeData);
+          }
         }
         
         await setTimerState({ 
@@ -436,6 +476,22 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
           currentRemainingTime = Math.floor(remainingMs / 1000);
         }
         
+        // Complete any ongoing session for the current domain
+        if (currentState.timerState === 'focus') {
+          const timeData = await getTimeData();
+          const ongoingSessionIndex = timeData.sessionHistory.findIndex(session => 
+            session.domain === currentDomain && 
+            session.type === 'focus' && 
+            !session.endTime // Incomplete session
+          );
+          
+          if (ongoingSessionIndex !== -1) {
+            // Complete the ongoing session
+            timeData.sessionHistory[ongoingSessionIndex].endTime = now;
+            await setTimeData(timeData);
+          }
+        }
+        
         await setTimerState({ 
           timerState: 'paused', // Set state to paused
           originalTimerType: currentState.timerState, // Preserve the original timer type (focus/break)
@@ -449,9 +505,54 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
           clearInterval(timerInterval);
           timerInterval = null;
         }
-        
-        // Update the border to transparent/hidden for all active tabs when paused
-        await updateAllTabsBorder('transparent');
+      }
+      
+      // Update the Flow Score icon on the current active tab to reflect the paused state
+      if (currentActiveTabId && currentDomain) {
+        try {
+          const timeData = await getTimeData();
+          const flowScore = await calculateFlowScore(currentDomain, timeData);
+          
+          // Prepare detailed time data for the hover modal
+          const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
+          const domainFocusTime = domainSessions.reduce((total, session) => total + session.duration, 0);
+          const hours = Math.floor(domainFocusTime / 3600);
+          const minutes = Math.floor((domainFocusTime % 3600) / 60);
+          
+          const modalContent = `
+            <div class="flowbar-modal-header">
+              <h3>Flow Score: ${flowScore}/100</h3>
+            </div>
+            <div class="flowbar-modal-content">
+              <p><strong>Domain:</strong> ${currentDomain}</p>
+              <p><strong>Focus Time:</strong> ${hours}h ${minutes}m</p>
+              <p><strong>Sessions:</strong> ${domainSessions.length}</p>
+            </div>
+          `;
+          
+          await chrome.scripting.executeScript({
+            target: { tabId: currentActiveTabId },
+            func: (score, content) => {
+              // Use the title-modifier functions that should be available in the content script
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.prependIconToTitle) {
+                window.flowbarTitleModifier.prependIconToTitle(score);
+              }
+              
+              // Create hover modal if the function is available
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.createHoverModal) {
+                window.flowbarTitleModifier.createHoverModal(content, {
+                  backgroundColor: '#2ecc71',
+                  textColor: '#ffffff',
+                  width: 300,
+                  height: 200
+                });
+              }
+            },
+            args: [flowScore, modalContent]
+          });
+        } catch (scriptError) {
+          console.warn('Flowbar background.js: Could not update icon on active tab after pause:', scriptError.message);
+        }
       }
       
       // Send response back to popup
@@ -482,12 +583,53 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         
         // Start updating the timer display
         startTimerUpdates();
-        
-        // Update the border color for all active tabs based on the resumed timer state
-        if (timerType === 'focus') {
-          await updateAllTabsBorder('rgba(46, 204, 113, 0.3)'); // Green for focus state
-        } else if (timerType === 'break') {
-          await updateAllTabsBorder('rgba(52, 152, 219, 0.3)'); // Blue for break state
+      }
+      
+      // Update the Flow Score icon on the current active tab to reflect the resumed state
+      if (currentActiveTabId && currentDomain) {
+        try {
+          const timeData = await getTimeData();
+          const flowScore = await calculateFlowScore(currentDomain, timeData);
+          
+          // Prepare detailed time data for the hover modal
+          const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
+          const domainFocusTime = domainSessions.reduce((total, session) => total + session.duration, 0);
+          const hours = Math.floor(domainFocusTime / 3600);
+          const minutes = Math.floor((domainFocusTime % 3600) / 60);
+          
+          const modalContent = `
+            <div class="flowbar-modal-header">
+              <h3>Flow Score: ${flowScore}/100</h3>
+            </div>
+            <div class="flowbar-modal-content">
+              <p><strong>Domain:</strong> ${currentDomain}</p>
+              <p><strong>Focus Time:</strong> ${hours}h ${minutes}m</p>
+              <p><strong>Sessions:</strong> ${domainSessions.length}</p>
+            </div>
+          `;
+          
+          await chrome.scripting.executeScript({
+            target: { tabId: currentActiveTabId },
+            func: (score, content) => {
+              // Use the title-modifier functions that should be available in the content script
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.prependIconToTitle) {
+                window.flowbarTitleModifier.prependIconToTitle(score);
+              }
+              
+              // Create hover modal if the function is available
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.createHoverModal) {
+                window.flowbarTitleModifier.createHoverModal(content, {
+                  backgroundColor: '#2ecc71',
+                  textColor: '#ffffff',
+                  width: 300,
+                  height: 200
+                });
+              }
+            },
+            args: [flowScore, modalContent]
+          });
+        } catch (scriptError) {
+          console.warn('Flowbar background.js: Could not update icon on active tab after resume:', scriptError.message);
         }
       }
       
@@ -518,6 +660,54 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       // Update the border to transparent/hidden for all active tabs when reset
       await updateAllTabsBorder('transparent');
       
+      // Update the Flow Score icon on the current active tab to reflect the reset state
+      if (currentActiveTabId && currentDomain) {
+        try {
+          const timeData = await getTimeData();
+          const flowScore = await calculateFlowScore(currentDomain, timeData);
+          
+          // Prepare detailed time data for the hover modal
+          const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
+          const domainFocusTime = domainSessions.reduce((total, session) => total + session.duration, 0);
+          const hours = Math.floor(domainFocusTime / 3600);
+          const minutes = Math.floor((domainFocusTime % 3600) / 60);
+          
+          const modalContent = `
+            <div class="flowbar-modal-header">
+              <h3>Flow Score: ${flowScore}/100</h3>
+            </div>
+            <div class="flowbar-modal-content">
+              <p><strong>Domain:</strong> ${currentDomain}</p>
+              <p><strong>Focus Time:</strong> ${hours}h ${minutes}m</p>
+              <p><strong>Sessions:</strong> ${domainSessions.length}</p>
+            </div>
+          `;
+          
+          await chrome.scripting.executeScript({
+            target: { tabId: currentActiveTabId },
+            func: (score, content) => {
+              // Use the title-modifier functions that should be available in the content script
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.prependIconToTitle) {
+                window.flowbarTitleModifier.prependIconToTitle(score);
+              }
+              
+              // Create hover modal if the function is available
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.createHoverModal) {
+                window.flowbarTitleModifier.createHoverModal(content, {
+                  backgroundColor: '#2ecc71',
+                  textColor: '#ffffff',
+                  width: 300,
+                  height: 200
+                });
+              }
+            },
+            args: [flowScore, modalContent]
+          });
+        } catch (scriptError) {
+          console.warn('Flowbar background.js: Could not update icon on active tab after reset:', scriptError.message);
+        }
+      }
+      
       // Send response back to popup
       return Promise.resolve({ success: true });
     } else if (request.action === 'stopTimer') {
@@ -527,20 +717,17 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       // If currently in focus state, log the partial session before stopping
       if (currentState.timerState === 'focus' && currentState.endTime) {
         const timeData = await getTimeData();
-        const sessionEndTime = Date.now();
-        const elapsedFocusTime = currentState.focusDuration - currentState.timeLeft;
+        const ongoingSessionIndex = timeData.sessionHistory.findIndex(session => 
+          session.domain === currentDomain && 
+          session.type === 'focus' && 
+          !session.endTime // Incomplete session
+        );
         
-        // Create a session record for the partially completed session
-        const stoppedSession = {
-          startTime: sessionEndTime - (elapsedFocusTime * 1000), // Convert to milliseconds
-          endTime: sessionEndTime,
-          duration: elapsedFocusTime,
-          type: 'focus',
-          domain: currentDomain || 'unknown'
-        };
-        
-        timeData.sessionHistory.push(stoppedSession);
-        await setTimeData(timeData);
+        if (ongoingSessionIndex !== -1) {
+          // Complete the ongoing session
+          timeData.sessionHistory[ongoingSessionIndex].endTime = Date.now();
+          await setTimeData(timeData);
+        }
       }
       
       // For stopTimer: just stop the current timer
@@ -550,6 +737,54 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
+      }
+      
+      // Update the Flow Score icon on the current active tab to reflect the stopped state
+      if (currentActiveTabId && currentDomain) {
+        try {
+          const timeData = await getTimeData();
+          const flowScore = await calculateFlowScore(currentDomain, timeData);
+          
+          // Prepare detailed time data for the hover modal
+          const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
+          const domainFocusTime = domainSessions.reduce((total, session) => total + session.duration, 0);
+          const hours = Math.floor(domainFocusTime / 3600);
+          const minutes = Math.floor((domainFocusTime % 3600) / 60);
+          
+          const modalContent = `
+            <div class="flowbar-modal-header">
+              <h3>Flow Score: ${flowScore}/100</h3>
+            </div>
+            <div class="flowbar-modal-content">
+              <p><strong>Domain:</strong> ${currentDomain}</p>
+              <p><strong>Focus Time:</strong> ${hours}h ${minutes}m</p>
+              <p><strong>Sessions:</strong> ${domainSessions.length}</p>
+            </div>
+          `;
+          
+          await chrome.scripting.executeScript({
+            target: { tabId: currentActiveTabId },
+            func: (score, content) => {
+              // Use the title-modifier functions that should be available in the content script
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.prependIconToTitle) {
+                window.flowbarTitleModifier.prependIconToTitle(score);
+              }
+              
+              // Create hover modal if the function is available
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.createHoverModal) {
+                window.flowbarTitleModifier.createHoverModal(content, {
+                  backgroundColor: '#2ecc71',
+                  textColor: '#ffffff',
+                  width: 300,
+                  height: 200
+                });
+              }
+            },
+            args: [flowScore, modalContent]
+          });
+        } catch (scriptError) {
+          console.warn('Flowbar background.js: Could not update icon on active tab after stop:', scriptError.message);
+        }
       }
       
       // Send response back to popup
@@ -574,6 +809,59 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     if (tab && tab.url) {
       const url = new URL(tab.url);
       currentDomain = url.hostname;
+      
+      // Calculate flow score for the current domain
+      let flowScore = 0;
+      try {
+        const timeData = await getTimeData();
+        flowScore = await calculateFlowScore(currentDomain, timeData);
+      } catch (error) {
+        console.error('Flowbar background.js error calculating flow score:', error);
+      }
+      
+      // Prepare detailed time data for the hover modal
+      const timeData = await getTimeData();
+      const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
+      const domainFocusTime = domainSessions.reduce((total, session) => total + session.duration, 0);
+      const hours = Math.floor(domainFocusTime / 3600);
+      const minutes = Math.floor((domainFocusTime % 3600) / 60);
+      
+      const modalContent = `
+        <div class="flowbar-modal-header">
+          <h3>Flow Score: ${flowScore}/100</h3>
+        </div>
+        <div class="flowbar-modal-content">
+          <p><strong>Domain:</strong> ${currentDomain}</p>
+          <p><strong>Focus Time:</strong> ${hours}h ${minutes}m</p>
+          <p><strong>Sessions:</strong> ${domainSessions.length}</p>
+        </div>
+      `;
+      
+      // Execute the title-modifier script to update the title and create modal
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: activeInfo.tabId },
+          func: (score, content) => {
+            // Use the title-modifier functions that should be available in the content script
+            if (window.flowbarTitleModifier && window.flowbarTitleModifier.prependIconToTitle) {
+              window.flowbarTitleModifier.prependIconToTitle(score);
+            }
+            
+            // Create hover modal if the function is available
+            if (window.flowbarTitleModifier && window.flowbarTitleModifier.createHoverModal) {
+              window.flowbarTitleModifier.createHoverModal(content, {
+                backgroundColor: '#2ecc71',
+                textColor: '#ffffff',
+                width: 300,
+                height: 200
+              });
+            }
+          },
+          args: [flowScore, modalContent]
+        });
+      } catch (scriptError) {
+        console.warn('Flowbar background.js: Could not execute title-modifier in tab:', scriptError.message);
+      }
     }
   } catch (error) {
     console.error('Flowbar background.js error getting active tab:', error);
@@ -589,6 +877,53 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       try {
         const url = new URL(tab.url);
         currentDomain = url.hostname;
+        
+        // Calculate flow score for the current domain
+        const timeData = await getTimeData();
+        const flowScore = await calculateFlowScore(currentDomain, timeData);
+        
+        // Prepare detailed time data for the hover modal
+        const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
+        const domainFocusTime = domainSessions.reduce((total, session) => total + session.duration, 0);
+        const hours = Math.floor(domainFocusTime / 3600);
+        const minutes = Math.floor((domainFocusTime % 3600) / 60);
+        
+        const modalContent = `
+          <div class="flowbar-modal-header">
+            <h3>Flow Score: ${flowScore}/100</h3>
+          </div>
+          <div class="flowbar-modal-content">
+            <p><strong>Domain:</strong> ${currentDomain}</p>
+            <p><strong>Focus Time:</strong> ${hours}h ${minutes}m</p>
+            <p><strong>Sessions:</strong> ${domainSessions.length}</p>
+          </div>
+        `;
+        
+        // Execute the title-modifier script to update the title and create modal
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            func: (score, content) => {
+              // Use the title-modifier functions that should be available in the content script
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.prependIconToTitle) {
+                window.flowbarTitleModifier.prependIconToTitle(score);
+              }
+              
+              // Create hover modal if the function is available
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.createHoverModal) {
+                window.flowbarTitleModifier.createHoverModal(content, {
+                  backgroundColor: '#2ecc71',
+                  textColor: '#ffffff',
+                  width: 300,
+                  height: 200
+                });
+              }
+            },
+            args: [flowScore, modalContent]
+          });
+        } catch (scriptError) {
+          console.warn('Flowbar background.js: Could not execute title-modifier in tab:', scriptError.message);
+        }
       } catch (error) {
         console.error('Flowbar background.js error parsing URL:', error);
         currentDomain = null;
@@ -608,6 +943,53 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
       if (activeTab.url) {
         const url = new URL(activeTab.url);
         currentDomain = url.hostname;
+        
+        // Calculate flow score for the current domain
+        const timeData = await getTimeData();
+        const flowScore = await calculateFlowScore(currentDomain, timeData);
+        
+        // Prepare detailed time data for the hover modal
+        const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
+        const domainFocusTime = domainSessions.reduce((total, session) => total + session.duration, 0);
+        const hours = Math.floor(domainFocusTime / 3600);
+        const minutes = Math.floor((domainFocusTime % 3600) / 60);
+        
+        const modalContent = `
+          <div class="flowbar-modal-header">
+            <h3>Flow Score: ${flowScore}/100</h3>
+          </div>
+          <div class="flowbar-modal-content">
+            <p><strong>Domain:</strong> ${currentDomain}</p>
+            <p><strong>Focus Time:</strong> ${hours}h ${minutes}m</p>
+            <p><strong>Sessions:</strong> ${domainSessions.length}</p>
+          </div>
+        `;
+        
+        // Execute the title-modifier script to update the title and create modal
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: activeTab.id },
+            func: (score, content) => {
+              // Use the title-modifier functions that should be available in the content script
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.prependIconToTitle) {
+                window.flowbarTitleModifier.prependIconToTitle(score);
+              }
+              
+              // Create hover modal if the function is available
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.createHoverModal) {
+                window.flowbarTitleModifier.createHoverModal(content, {
+                  backgroundColor: '#2ecc71',
+                  textColor: '#ffffff',
+                  width: 300,
+                  height: 200
+                });
+              }
+            },
+            args: [flowScore, modalContent]
+          });
+        } catch (scriptError) {
+          console.warn('Flowbar background.js: Could not execute title-modifier in tab:', scriptError.message);
+        }
       }
     }
   } catch (error) {
@@ -649,6 +1031,28 @@ function startTracking() {
         // Increment the total focus time
         timeData.totalFocusTime += 1;
         
+        // Find the current session for this domain to update
+        const activeSessionIndex = timeData.sessionHistory.findIndex(session => 
+          session.domain === currentDomain && 
+          session.type === 'focus' && 
+          !session.endTime // Incomplete session
+        );
+        
+        if (activeSessionIndex !== -1) {
+          // Update the duration of the active session
+          timeData.sessionHistory[activeSessionIndex].duration += 1;
+        } else {
+          // Create a new ongoing session if none exists
+          const newSession = {
+            startTime: Date.now(),
+            endTime: null, // Will be set when the session ends
+            duration: 1,
+            type: 'focus',
+            domain: currentDomain
+          };
+          timeData.sessionHistory.push(newSession);
+        }
+        
         // Get today's date in YYYY-MM-DD format for the flow score
         const today = new Date().toISOString().split('T')[0];
         
@@ -658,23 +1062,30 @@ function startTracking() {
         }
         timeData.flowScores[today] += 1; // Increment by 1 second
         
-        // Add to session history if this is the start of a new session
-        // For now, we'll just track time, but could be enhanced later to track individual sessions
-        
         // Save updated time data
         await setTimeData(timeData);
+        
+        // We shouldn't update the title every second as it creates performance issues
+        // The title and modal are updated via tab event listeners when the user switches tabs
+        // This section was removed to prevent excessive updates every second
       } else if (timerState.timerState === 'break' && currentDomain) {
         // Optional: Track break time separately if needed
         // For now, we're only tracking focus time for the Flow Score
       }
       
-      // Update the browser action badge with current focus time if timer is active
-      if (timerState.timerState === 'focus') {
-        const minutes = Math.floor(timeData.totalFocusTime / 60);
-        const seconds = timeData.totalFocusTime % 60;
+      // Update the browser action badge with current session time if timer is active
+      if (timerState.timerState === 'focus' || timerState.timerState === 'break') {
+        const minutes = Math.floor(timerState.timeLeft / 60);
+        const seconds = timerState.timeLeft % 60;
         const badgeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
         chrome.action.setBadgeText({ text: badgeText });
-        chrome.action.setBadgeBackgroundColor({ color: '#2ecc71' }); // Green for focus
+        
+        // Use different colors for focus vs break
+        if (timerState.timerState === 'focus') {
+          chrome.action.setBadgeBackgroundColor({ color: '#2ecc71' }); // Green for focus
+        } else {
+          chrome.action.setBadgeBackgroundColor({ color: '#3498db' }); // Blue for break
+        }
       } else {
         chrome.action.setBadgeText({ text: '' }); // Clear badge when not focusing
       }
@@ -691,6 +1102,62 @@ function stopTracking() {
     trackingInterval = null;
   }
 }
+
+// Storage change listener to handle timer state changes and update icons accordingly
+chrome.storage.onChanged.addListener(async (changes, namespace) => {
+  if (namespace === 'sync') {
+    // Check if timer state has changed
+    if (changes.timerState) {
+      // Update the Flow Score icon on the current active tab to reflect the new state
+      if (currentActiveTabId && currentDomain) {
+        try {
+          const timeData = await getTimeData();
+          const flowScore = await calculateFlowScore(currentDomain, timeData);
+          
+          // Prepare detailed time data for the hover modal
+          const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
+          const domainFocusTime = domainSessions.reduce((total, session) => total + session.duration, 0);
+          const hours = Math.floor(domainFocusTime / 3600);
+          const minutes = Math.floor((domainFocusTime % 3600) / 60);
+          
+          const modalContent = `
+            <div class="flowbar-modal-header">
+              <h3>Flow Score: ${flowScore}/100</h3>
+            </div>
+            <div class="flowbar-modal-content">
+              <p><strong>Domain:</strong> ${currentDomain}</p>
+              <p><strong>Focus Time:</strong> ${hours}h ${minutes}m</p>
+              <p><strong>Sessions:</strong> ${domainSessions.length}</p>
+            </div>
+          `;
+          
+          await chrome.scripting.executeScript({
+            target: { tabId: currentActiveTabId },
+            func: (score, content) => {
+              // Use the title-modifier functions that should be available in the content script
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.prependIconToTitle) {
+                window.flowbarTitleModifier.prependIconToTitle(score);
+              }
+              
+              // Create hover modal if the function is available
+              if (window.flowbarTitleModifier && window.flowbarTitleModifier.createHoverModal) {
+                window.flowbarTitleModifier.createHoverModal(content, {
+                  backgroundColor: '#2ecc71',
+                  textColor: '#ffffff',
+                  width: 300,
+                  height: 200
+                });
+              }
+            },
+            args: [flowScore, modalContent]
+          });
+        } catch (scriptError) {
+          console.warn('Flowbar background.js: Could not update icon on active tab after state change:', scriptError.message);
+        }
+      }
+    }
+  }
+});
 
 // When extension starts, check if there's an active timer and resume updates if needed
 chrome.runtime.onStartup.addListener(async () => {
@@ -736,22 +1203,19 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       nextState = 'break';
       nextDurationSeconds = currentState.breakDuration; // Duration in seconds
       
-      // Log the completed focus session
+      // Complete any ongoing session for the current domain
       const timeData = await getTimeData();
-      const sessionEndTime = Date.now();
-      const focusDuration = currentState.focusDuration - currentState.timeLeft; // Time spent in focus
+      const ongoingSessionIndex = timeData.sessionHistory.findIndex(session => 
+        session.domain === currentDomain && 
+        session.type === 'focus' && 
+        !session.endTime // Incomplete session
+      );
       
-      // Create a session record
-      const completedSession = {
-        startTime: sessionEndTime - (focusDuration * 1000), // Convert to milliseconds
-        endTime: sessionEndTime,
-        duration: focusDuration,
-        type: 'focus',
-        domain: currentDomain || 'unknown'
-      };
-      
-      timeData.sessionHistory.push(completedSession);
-      await setTimeData(timeData);
+      if (ongoingSessionIndex !== -1) {
+        // Complete the ongoing session
+        timeData.sessionHistory[ongoingSessionIndex].endTime = Date.now();
+        await setTimeData(timeData);
+      }
     } else if (currentState.timerState === 'break') {
       // After break, transition back to focus using configured duration
       nextState = 'focus';
@@ -764,6 +1228,20 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         endTime: null,
         timeLeft: currentState.timeLeft // Preserve timeLeft
       });
+      // Complete any ongoing session for the current domain
+      const timeData = await getTimeData();
+      const ongoingSessionIndex = timeData.sessionHistory.findIndex(session => 
+        session.domain === currentDomain && 
+        session.type === 'focus' && 
+        !session.endTime // Incomplete session
+      );
+      
+      if (ongoingSessionIndex !== -1) {
+        // Complete the ongoing session
+        timeData.sessionHistory[ongoingSessionIndex].endTime = Date.now();
+        await setTimeData(timeData);
+      }
+      
       // Update the border to transparent/hidden for all active tabs
       await updateAllTabsBorder('transparent');
       return;

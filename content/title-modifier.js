@@ -1,18 +1,105 @@
 // Flowbar Title Modifier Content Script
 
 /**
- * Prepends an icon to the document title
- * @param {string} iconHtml - The HTML string for the icon to prepend
+ * Creates a custom HTML/CSS flow score icon element and prepends it to the page
+ * @param {number} score - The flow score (0-100)
  */
-function prependIconToTitle(iconHtml) {
-  // Get the current title
-  let currentTitle = document.title;
-  
-  // Check if the icon is already prepended to avoid duplicates
-  if (!currentTitle.includes(iconHtml.trim())) {
-    // Prepend the icon to the title
-    document.title = iconHtml + currentTitle;
+function prependIconToTitle(score) {
+  // Remove existing Flowbar icon element if it exists to prevent duplicates
+  const existingIcon = document.getElementById('flowbar-score-icon');
+  if (existingIcon) {
+    existingIcon.remove();
   }
+  
+  // Remove any existing title icon from document title to prevent duplicates
+  let currentTitle = document.title;
+  currentTitle = currentTitle.replace(/^\[FLOWBAR_ICON\].*?\[\/FLOWBAR_ICON\]\s*/, '');
+  document.title = currentTitle;
+  
+  // Determine the icon styling based on the flow score
+  let bgColor = '#808080'; // Default for no score
+  let scoreText = '0';
+  
+  if (score >= 80) {
+    bgColor = '#27ae60'; // Dark green for high score
+    scoreText = 'A';
+  } else if (score >= 60) {
+    bgColor = '#2ecc71'; // Green for good score
+    scoreText = 'B';
+  } else if (score >= 40) {
+    bgColor = '#f39c12'; // Orange for medium score
+    scoreText = 'C';
+  } else if (score > 0) {
+    bgColor = '#e74c3c'; // Red for low score
+    scoreText = 'D';
+  }
+  
+  // Create the icon element
+  const icon = document.createElement('span');
+  icon.id = 'flowbar-score-icon';
+  icon.innerHTML = scoreText;
+  icon.style.cssText = `
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: ${bgColor};
+    color: white;
+    text-align: center;
+    line-height: 20px;
+    font-size: 10px;
+    font-weight: bold;
+    z-index: 2147483647;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    font-family: Arial, sans-serif;
+  `;
+  
+  // Add the icon to the page
+  document.body.appendChild(icon);
+}
+
+/**
+ * Creates a custom HTML/CSS flow score icon
+ * @param {number} score - The flow score (0-100)
+ * @returns {string} - HTML string for the custom icon
+ */
+function createFlowScoreIcon(score) {
+  let bgColor = '#808080'; // Default for no score
+  let scoreText = '0';
+  
+  if (score >= 80) {
+    bgColor = '#27ae60'; // Dark green for high score
+    scoreText = 'A';
+  } else if (score >= 60) {
+    bgColor = '#2ecc71'; // Green for good score
+    scoreText = 'B';
+  } else if (score >= 40) {
+    bgColor = '#f39c12'; // Orange for medium score
+    scoreText = 'C';
+  } else if (score > 0) {
+    bgColor = '#e74c3c'; // Red for low score
+    scoreText = 'D';
+  }
+  
+  return `
+    <span id="flowbar-score-icon" style="
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background-color: ${bgColor};
+      color: white;
+      text-align: center;
+      line-height: 16px;
+      font-size: 10px;
+      font-weight: bold;
+      margin-right: 4px;
+      vertical-align: middle;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    ">${scoreText}</span>
+  `;
 }
 
 /**
@@ -49,10 +136,10 @@ function createHoverModal(modalContent, options = {}) {
   
   // Apply styles to the modal
   modal.style.position = 'fixed';
-  modal.style.top = '10px';
-  modal.style.right = '10px';
+  modal.style.top = '40px'; // Position below the icon
+  modal.style.left = '10px';
   modal.style.width = `${modalOptions.width}px`;
-  modal.style.height = `${modalOptions.height}px`;
+  modal.style.maxHeight = `${modalOptions.height}px`;
   modal.style.backgroundColor = modalOptions.backgroundColor;
   modal.style.color = modalOptions.textColor;
   modal.style.borderRadius = '8px';
@@ -63,22 +150,33 @@ function createHoverModal(modalContent, options = {}) {
   modal.style.fontSize = '14px';
   modal.style.lineHeight = '1.4';
   modal.style.display = 'none'; // Initially hidden
+  modal.style.fontFamily = 'Arial, sans-serif';
   
   // Add the modal to the document body
   document.body.appendChild(modal);
   
-  // Make modal visible on hover of the title icon
-  const titleIcon = document.querySelector('.flowbar-title-icon');
-  if (titleIcon) {
-    titleIcon.addEventListener('mouseenter', () => {
+  // Make modal visible on hover of the flowbar score icon
+  const scoreIcon = document.getElementById('flowbar-score-icon');
+  if (scoreIcon) {
+    // Position the modal near the icon
+    scoreIcon.addEventListener('mouseenter', () => {
       modal.style.display = 'block';
     });
     
-    titleIcon.addEventListener('mouseleave', () => {
-      modal.style.display = 'none';
+    scoreIcon.addEventListener('mouseleave', () => {
+      // Add a slight delay to allow moving to the modal
+      setTimeout(() => {
+        if (!modal.matches(':hover')) {
+          modal.style.display = 'none';
+        }
+      }, 200);
     });
     
-    // Also hide modal when mouse leaves the modal itself
+    // Also handle mouse events on the modal itself
+    modal.addEventListener('mouseenter', () => {
+      modal.style.display = 'block';
+    });
+    
     modal.addEventListener('mouseleave', () => {
       modal.style.display = 'none';
     });
