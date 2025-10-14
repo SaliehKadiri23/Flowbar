@@ -1,6 +1,133 @@
 // Flowbar background script - Core timer state management
 
 /**
+ * Updates the border color for all tabs
+ * @param {string} color - The color to set the border (e.g., 'rgba(46, 204, 113, 0.3)' for focus, 'rgba(52, 152, 219, 0.3)' for break)
+ * @returns {Promise<void>}
+ */
+async function updateAllTabsBorder(color) {
+  try {
+    // Query all tabs (not just active ones) to ensure consistent border state across all tabs
+    const tabs = await chrome.tabs.query({});
+
+    // For each tab, inject the content script function to update the border
+    for (const tab of tabs) {
+      // Only inject into tabs that are not extension pages or special pages
+      if (tab.url && 
+          !tab.url.startsWith('chrome://') && 
+          !tab.url.startsWith('chrome-extension://') && 
+          !tab.url.startsWith('about:') && 
+          !tab.url.startsWith('data:')) {
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: (borderColor) => {
+              // Create or update the style element for the border
+              let style = document.getElementById('flowbar-styles');
+              if (!style) {
+                style = document.createElement('style');
+                style.id = 'flowbar-styles';
+                document.head.appendChild(style);
+              }
+              
+              // Update the style with the new color
+              style.textContent = `
+                .flowbar-border {
+                  position: fixed !important;
+                  z-index: 2147483647 !important; /* Maximum z-index value */
+                  pointer-events: none !important;
+                  box-sizing: border-box !important;
+                }
+                
+                .flowbar-border-top {
+                  top: 0 !important;
+                  left: 0 !important;
+                  width: 100% !important;
+                  height: 8px !important;
+                  border-radius: 0 0 8px 8px !important;
+                }
+                
+                .flowbar-border-right {
+                  top: 0 !important;
+                  right: 0 !important;
+                  width: 8px !important;
+                  height: 100% !important;
+                  border-radius: 8px 0 0 8px !important;
+                }
+                
+                .flowbar-border-bottom {
+                  bottom: 0 !important;
+                  left: 0 !important;
+                  width: 100% !important;
+                  height: 8px !important;
+                  border-radius: 8px 8px 0 0 !important;
+                }
+                
+                .flowbar-border-left {
+                  top: 0 !important;
+                  left: 0 !important;
+                  width: 8px !important;
+                  height: 100% !important;
+                  border-radius: 0 8px 8px 0 !important;
+                }
+                
+                .flowbar-focus {
+                  background: linear-gradient(90deg, rgba(46, 204, 113, 0.3), rgba(39, 174, 96, 0.3)) !important;
+                }
+                
+                .flowbar-break {
+                  background: linear-gradient(90deg, rgba(52, 152, 219, 0.3), rgba(41, 128, 185, 0.3)) !important;
+                }
+                
+                .flowbar-stopped {
+                  background: transparent !important;
+                }
+                
+                /* Dynamic color class that will be updated with the passed color */
+                .flowbar-border-color {
+                  background: ${borderColor} !important;
+                  animation: flowbar-pulse 2s infinite ease-in-out !important;
+                }
+                
+                @keyframes flowbar-pulse {
+                  0% {
+                    opacity: 0.3;
+                  }
+                  50% {
+                    opacity: 0.6;
+                  }
+                  100% {
+                    opacity: 0.3;
+                  }
+                }
+              `;
+              
+              // Remove existing borders to avoid duplicates
+              const existingBorders = document.querySelectorAll('[class*="flowbar-border"]');
+              existingBorders.forEach(border => border.remove());
+              
+              // Create border elements for each side using the passed color
+              const sides = ['top', 'right', 'bottom', 'left'];
+              sides.forEach(side => {
+                const border = document.createElement('div');
+                border.className = `flowbar-border flowbar-border-${side} flowbar-border-color`;
+                document.body.appendChild(border);
+              });
+            },
+            args: [color]
+          });
+        } catch (injectError) {
+          // If injection fails for a specific tab (e.g., due to permissions), continue with other tabs
+          console.warn('Flowbar background.js warning: Could not inject into tab:', tab.url, injectError.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Flowbar background.js error updating tabs border:', error);
+  }
+}
+
+/**
  * Gets the current timer state from chrome.storage.sync
  * @returns {Promise<Object>} The timer state object containing timerState, endTime, and timeLeft
  */
@@ -90,6 +217,13 @@ async function startTimer(durationInMinutes, state) {
     await chrome.alarms.create(`timer_${state}`, {
       when: endTime
     });
+    
+    // Update the border color for all active tabs based on the timer state
+    if (state === 'focus') {
+      await updateAllTabsBorder('rgba(46, 204, 113, 0.3)'); // Green for focus state
+    } else if (state === 'break') {
+      await updateAllTabsBorder('rgba(52, 152, 219, 0.3)'); // Blue for break state
+    }
   } catch (error) {
     console.error('Flowbar background.js error:', error);
   }
@@ -115,6 +249,9 @@ async function stopTimer() {
       endTime: null,
       timeLeft: focusDuration // Reset to initial focus duration
     });
+    
+    // Update the border to transparent/hidden for all active tabs
+    await updateAllTabsBorder('transparent');
   } catch (error) {
     console.error('Flowbar background.js error:', error);
   }
@@ -187,6 +324,9 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         
         // Start updating the timer display
         startTimerUpdates();
+        
+        // Update the border to focus color for all active tabs when starting a focus session
+        await updateAllTabsBorder('rgba(46, 204, 113, 0.3)'); // Green for focus state
       } else if (currentState.timerState === 'paused') {
         // If paused, resume the paused timer (this is now handled by resumeTimer action)
         return Promise.resolve({ success: false, error: "Use resumeTimer action to resume a paused timer" });
@@ -213,6 +353,9 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
           clearInterval(timerInterval);
           timerInterval = null;
         }
+        
+        // Update the border to transparent/hidden for all active tabs when pausing
+        await updateAllTabsBorder('transparent');
       }
       
       // Send response back to popup (using async/await pattern)
@@ -243,6 +386,9 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
           clearInterval(timerInterval);
           timerInterval = null;
         }
+        
+        // Update the border to transparent/hidden for all active tabs when paused
+        await updateAllTabsBorder('transparent');
       }
       
       // Send response back to popup
@@ -273,6 +419,13 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         
         // Start updating the timer display
         startTimerUpdates();
+        
+        // Update the border color for all active tabs based on the resumed timer state
+        if (timerType === 'focus') {
+          await updateAllTabsBorder('rgba(46, 204, 113, 0.3)'); // Green for focus state
+        } else if (timerType === 'break') {
+          await updateAllTabsBorder('rgba(52, 152, 219, 0.3)'); // Blue for break state
+        }
       }
       
       // Send response back to popup
@@ -298,6 +451,9 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         endTime: null,
         timeLeft: focusDuration // Reset to initial focus duration
       });
+      
+      // Update the border to transparent/hidden for all active tabs when reset
+      await updateAllTabsBorder('transparent');
       
       // Send response back to popup
       return Promise.resolve({ success: true });
@@ -366,6 +522,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         endTime: null,
         timeLeft: currentState.timeLeft // Preserve timeLeft
       });
+      // Update the border to transparent/hidden for all active tabs
+      await updateAllTabsBorder('transparent');
       return;
     }
 
