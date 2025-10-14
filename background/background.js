@@ -384,6 +384,25 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
           currentRemainingTime = Math.floor(remainingMs / 1000);
         }
         
+        // Log the paused session if it was a focus session
+        if (currentState.timerState === 'focus') {
+          const timeData = await getTimeData();
+          const sessionEndTime = now;
+          const elapsedFocusTime = currentState.focusDuration - currentState.timeLeft;
+          
+          // Create a session record for the partially completed session
+          const pausedSession = {
+            startTime: sessionEndTime - (elapsedFocusTime * 1000), // Convert to milliseconds
+            endTime: sessionEndTime,
+            duration: elapsedFocusTime,
+            type: 'focus',
+            domain: currentDomain || 'unknown'
+          };
+          
+          timeData.sessionHistory.push(pausedSession);
+          await setTimeData(timeData);
+        }
+        
         await setTimerState({ 
           timerState: 'paused', 
           originalTimerType: currentState.timerState, // Preserve the original timer type (focus/break)
@@ -502,6 +521,28 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       // Send response back to popup
       return Promise.resolve({ success: true });
     } else if (request.action === 'stopTimer') {
+      // Get current state to check if we need to log a partial session
+      const currentState = await getTimerState();
+      
+      // If currently in focus state, log the partial session before stopping
+      if (currentState.timerState === 'focus' && currentState.endTime) {
+        const timeData = await getTimeData();
+        const sessionEndTime = Date.now();
+        const elapsedFocusTime = currentState.focusDuration - currentState.timeLeft;
+        
+        // Create a session record for the partially completed session
+        const stoppedSession = {
+          startTime: sessionEndTime - (elapsedFocusTime * 1000), // Convert to milliseconds
+          endTime: sessionEndTime,
+          duration: elapsedFocusTime,
+          type: 'focus',
+          domain: currentDomain || 'unknown'
+        };
+        
+        timeData.sessionHistory.push(stoppedSession);
+        await setTimeData(timeData);
+      }
+      
       // For stopTimer: just stop the current timer
       await stopTimer();
       
@@ -520,16 +561,152 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   }
 });
 
+// Variables for tracking active tab and domain
+let currentActiveTabId = null;
+let currentDomain = null;
+let trackingInterval = null;
+
+// Listener for tab activation (when user switches tabs)
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  currentActiveTabId = activeInfo.tabId;
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab && tab.url) {
+      const url = new URL(tab.url);
+      currentDomain = url.hostname;
+    }
+  } catch (error) {
+    console.error('Flowbar background.js error getting active tab:', error);
+    currentDomain = null;
+  }
+});
+
+// Listener for tab updates (when URL changes in current tab)
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.active && tab.windowId === (await chrome.windows.getCurrent()).id) {
+    currentActiveTabId = tabId;
+    if (tab.url) {
+      try {
+        const url = new URL(tab.url);
+        currentDomain = url.hostname;
+      } catch (error) {
+        console.error('Flowbar background.js error parsing URL:', error);
+        currentDomain = null;
+      }
+    }
+  }
+});
+
+// Listener for window focus changes
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+  try {
+    // Get the currently active tab in the focused window
+    const tabs = await chrome.tabs.query({ active: true, windowId: windowId });
+    if (tabs.length > 0) {
+      const activeTab = tabs[0];
+      currentActiveTabId = activeTab.id;
+      if (activeTab.url) {
+        const url = new URL(activeTab.url);
+        currentDomain = url.hostname;
+      }
+    }
+  } catch (error) {
+    console.error('Flowbar background.js error in window focus change:', error);
+  }
+});
+
+// Initialize the current active tab and domain when the background script starts
+async function initializeActiveTab() {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs.length > 0) {
+      const activeTab = tabs[0];
+      currentActiveTabId = activeTab.id;
+      if (activeTab.url) {
+        const url = new URL(activeTab.url);
+        currentDomain = url.hostname;
+      }
+    }
+  } catch (error) {
+    console.error('Flowbar background.js error initializing active tab:', error);
+  }
+}
+
+// 1-second interval to track time based on active domain and focus state
+function startTracking() {
+  if (trackingInterval) {
+    clearInterval(trackingInterval);
+  }
+  
+  trackingInterval = setInterval(async () => {
+    try {
+      // Get the current timer state
+      const timerState = await getTimerState();
+      const timeData = await getTimeData();
+      
+      // Only track if timer is in focus state and there's an active domain
+      if (timerState.timerState === 'focus' && currentDomain) {
+        // Increment the total focus time
+        timeData.totalFocusTime += 1;
+        
+        // Get today's date in YYYY-MM-DD format for the flow score
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Initialize or increment today's flow score
+        if (!timeData.flowScores[today]) {
+          timeData.flowScores[today] = 0;
+        }
+        timeData.flowScores[today] += 1; // Increment by 1 second
+        
+        // Add to session history if this is the start of a new session
+        // For now, we'll just track time, but could be enhanced later to track individual sessions
+        
+        // Save updated time data
+        await setTimeData(timeData);
+      } else if (timerState.timerState === 'break' && currentDomain) {
+        // Optional: Track break time separately if needed
+        // For now, we're only tracking focus time for the Flow Score
+      }
+      
+      // Update the browser action badge with current focus time if timer is active
+      if (timerState.timerState === 'focus') {
+        const minutes = Math.floor(timeData.totalFocusTime / 60);
+        const seconds = timeData.totalFocusTime % 60;
+        const badgeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        chrome.action.setBadgeText({ text: badgeText });
+        chrome.action.setBadgeBackgroundColor({ color: '#2ecc71' }); // Green for focus
+      } else {
+        chrome.action.setBadgeText({ text: '' }); // Clear badge when not focusing
+      }
+    } catch (error) {
+      console.error('Flowbar background.js error in tracking interval:', error);
+    }
+  }, 1000); // 1 second interval
+}
+
+// Function to stop tracking
+function stopTracking() {
+  if (trackingInterval) {
+    clearInterval(trackingInterval);
+    trackingInterval = null;
+  }
+}
+
 // When extension starts, check if there's an active timer and resume updates if needed
 chrome.runtime.onStartup.addListener(async () => {
   const state = await getTimerState();
   if (state.timerState === 'focus' || state.timerState === 'break') {
     startTimerUpdates();
   }
+  
+  // Initialize the active tab and start tracking
+  await initializeActiveTab();
+  startTracking();
 });
 
 // When extension is installed, set default durations
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
+  // Set default durations
   chrome.storage.sync.get(['focusDuration', 'breakDuration']).then((result) => {
     if (!result.focusDuration) {
       chrome.storage.sync.set({ focusDuration: 25 * 60 }); // 25 minutes in seconds
@@ -538,6 +715,10 @@ chrome.runtime.onInstalled.addListener(() => {
       chrome.storage.sync.set({ breakDuration: 5 * 60 }); // 5 minutes in seconds
     }
   });
+  
+  // Initialize the active tab and start tracking
+  await initializeActiveTab();
+  startTracking();
 });
 
 // Alarm listener to handle timer transitions
@@ -554,6 +735,23 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       // After focus, transition to break using configured duration
       nextState = 'break';
       nextDurationSeconds = currentState.breakDuration; // Duration in seconds
+      
+      // Log the completed focus session
+      const timeData = await getTimeData();
+      const sessionEndTime = Date.now();
+      const focusDuration = currentState.focusDuration - currentState.timeLeft; // Time spent in focus
+      
+      // Create a session record
+      const completedSession = {
+        startTime: sessionEndTime - (focusDuration * 1000), // Convert to milliseconds
+        endTime: sessionEndTime,
+        duration: focusDuration,
+        type: 'focus',
+        domain: currentDomain || 'unknown'
+      };
+      
+      timeData.sessionHistory.push(completedSession);
+      await setTimeData(timeData);
     } else if (currentState.timerState === 'break') {
       // After break, transition back to focus using configured duration
       nextState = 'focus';
