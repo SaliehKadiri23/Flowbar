@@ -28,13 +28,19 @@ h1 {
   color: #34495e;
 }
 
-.setting-group input {
+.setting-group input,
+.setting-group textarea {
   width: 100%;
   padding: 10px;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 16px;
   box-sizing: border-box;
+}
+
+.setting-group textarea {
+  resize: vertical;
+  min-height: 80px;
 }
 
 button {

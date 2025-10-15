@@ -13,13 +13,15 @@ async function loadSettings() {
     const result = await chrome.storage.sync.get({
       focusDuration: 25 * 60, // default 25 minutes in seconds
       breakDuration: 5 * 60,   // default 5 minutes in seconds
-      distractionSites: ''     // default empty string
+      distractionSites: '',    // default empty string
+      focusSites: ''           // default empty string
     });
     
     // Convert seconds to minutes for display
     document.getElementById('focusDuration').value = Math.floor(result.focusDuration / 60);
     document.getElementById('breakDuration').value = Math.floor(result.breakDuration / 60);
     document.getElementById('distractionSites').value = result.distractionSites;
+    document.getElementById('focusSites').value = result.focusSites;
   } catch (error) {
     console.error("Flowbar options.js error loading settings:", error);
   }
@@ -40,12 +42,14 @@ async function saveSettings() {
     const focusMins = parseInt(document.getElementById('focusDuration').value) || 25;
     const breakMins = parseInt(document.getElementById('breakDuration').value) || 5;
     const distractionSites = document.getElementById('distractionSites').value;
+    const focusSites = document.getElementById('focusSites').value;
     
     // Convert minutes to seconds for storage
     await chrome.storage.sync.set({
       focusDuration: focusMins * 60,
       breakDuration: breakMins * 60,
-      distractionSites: distractionSites
+      distractionSites: distractionSites,
+      focusSites: focusSites
     });
     
     // Show status message

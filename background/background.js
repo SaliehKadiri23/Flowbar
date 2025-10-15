@@ -52,9 +52,10 @@ async function setTimeData(timeData) {
  */
 async function calculateFlowScore(domain, timeData) {
   try {
-    // Get distraction sites from storage
-    const settings = await chrome.storage.sync.get(['distractionSites']);
+    // Get distraction and focus sites from storage
+    const settings = await chrome.storage.sync.get(['distractionSites', 'focusSites']);
     const distractionSites = (settings.distractionSites || '').split(',').map(site => site.trim()).filter(site => site);
+    const focusSites = (settings.focusSites || '').split(',').map(site => site.trim()).filter(site => site);
     
     // Get all sessions for the specific domain
     const domainSessions = timeData.sessionHistory.filter(session => session.domain === domain);
@@ -93,8 +94,23 @@ async function calculateFlowScore(domain, timeData) {
       } else {
         return 50;  // Less than 15 min
       }
+    } else if (focusSites.includes(domain)) {
+      // For focus sites, reward the score based on time spent
+      const hoursSpent = totalTime / 3600; // Convert to hours
+      
+      if (hoursSpent > 2) {
+        return 95;  // Very high score for spending more than 2 hours on a focus site
+      } else if (hoursSpent > 1) {
+        return 85;  // High score for 1-2 hours
+      } else if (hoursSpent > 0.5) {
+        return 75;  // 30 min to 1 hour
+      } else if (hoursSpent > 0.25) {
+        return 65;  // 15-30 min
+      } else {
+        return 60;  // Less than 15 min
+      }
     } else {
-      // For non-distraction sites, calculate based on ratio but with a penalty for any distraction time
+      // For non-distraction/focus sites, calculate based on ratio but with a penalty for any distraction time
       const focusPercentage = domainFocusTime > 0 ? (domainFocusTime / totalTime) * 100 : 0;
       
       // Apply a penalty if any distraction time was logged during session
@@ -565,13 +581,14 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             // Prepare detailed time data for the hover modal
             const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
             
-            // Get distraction sites from storage
-            const settings = await chrome.storage.sync.get(['distractionSites']);
+            // Get distraction and focus sites from storage
+            const settings = await chrome.storage.sync.get(['distractionSites', 'focusSites']);
             const distractionSites = (settings.distractionSites || '').split(',').map(site => site.trim()).filter(site => site);
+            const focusSites = (settings.focusSites || '').split(',').map(site => site.trim()).filter(site => site);
             
             // Calculate focus and distraction time separately
             const domainFocusTime = domainSessions
-              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
               .reduce((total, session) => total + session.duration, 0);
             
             const domainDistractionTime = domainSessions
@@ -667,13 +684,14 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             // Prepare detailed time data for the hover modal
             const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
             
-            // Get distraction sites from storage
-            const settings = await chrome.storage.sync.get(['distractionSites']);
+            // Get distraction and focus sites from storage
+            const settings = await chrome.storage.sync.get(['distractionSites', 'focusSites']);
             const distractionSites = (settings.distractionSites || '').split(',').map(site => site.trim()).filter(site => site);
+            const focusSites = (settings.focusSites || '').split(',').map(site => site.trim()).filter(site => site);
             
             // Calculate focus and distraction time separately
             const domainFocusTime = domainSessions
-              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
               .reduce((total, session) => total + session.duration, 0);
             
             const domainDistractionTime = domainSessions
@@ -766,13 +784,14 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             // Prepare detailed time data for the hover modal
             const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
             
-            // Get distraction sites from storage
-            const settings = await chrome.storage.sync.get(['distractionSites']);
+            // Get distraction and focus sites from storage
+            const settings = await chrome.storage.sync.get(['distractionSites', 'focusSites']);
             const distractionSites = (settings.distractionSites || '').split(',').map(site => site.trim()).filter(site => site);
+            const focusSites = (settings.focusSites || '').split(',').map(site => site.trim()).filter(site => site);
             
             // Calculate focus and distraction time separately
             const domainFocusTime = domainSessions
-              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
               .reduce((total, session) => total + session.duration, 0);
             
             const domainDistractionTime = domainSessions
@@ -869,13 +888,14 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             // Prepare detailed time data for the hover modal
             const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
             
-            // Get distraction sites from storage
-            const settings = await chrome.storage.sync.get(['distractionSites']);
+            // Get distraction and focus sites from storage
+            const settings = await chrome.storage.sync.get(['distractionSites', 'focusSites']);
             const distractionSites = (settings.distractionSites || '').split(',').map(site => site.trim()).filter(site => site);
+            const focusSites = (settings.focusSites || '').split(',').map(site => site.trim()).filter(site => site);
             
             // Calculate focus and distraction time separately
             const domainFocusTime = domainSessions
-              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
               .reduce((total, session) => total + session.duration, 0);
             
             const domainDistractionTime = domainSessions
@@ -970,13 +990,14 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
         const timeData = await getTimeData();
         const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
         
-        // Get distraction sites from storage
-        const settings = await chrome.storage.sync.get(['distractionSites']);
+        // Get distraction and focus sites from storage
+        const settings = await chrome.storage.sync.get(['distractionSites', 'focusSites']);
         const distractionSites = (settings.distractionSites || '').split(',').map(site => site.trim()).filter(site => site);
+        const focusSites = (settings.focusSites || '').split(',').map(site => site.trim()).filter(site => site);
         
         // Calculate focus and distraction time separately
         const domainFocusTime = domainSessions
-          .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain))
+          .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
           .reduce((total, session) => total + session.duration, 0);
         
         const domainDistractionTime = domainSessions
@@ -1052,13 +1073,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         // Prepare detailed time data for the hover modal
         const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
         
-        // Get distraction sites from storage
-        const settings = await chrome.storage.sync.get(['distractionSites']);
+        // Get distraction and focus sites from storage
+        const settings = await chrome.storage.sync.get(['distractionSites', 'focusSites']);
         const distractionSites = (settings.distractionSites || '').split(',').map(site => site.trim()).filter(site => site);
+        const focusSites = (settings.focusSites || '').split(',').map(site => site.trim()).filter(site => site);
         
         // Calculate focus and distraction time separately
         const domainFocusTime = domainSessions
-          .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain))
+          .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
           .reduce((total, session) => total + session.duration, 0);
         
         const domainDistractionTime = domainSessions
@@ -1138,13 +1160,14 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
         // Prepare detailed time data for the hover modal
         const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
         
-        // Get distraction sites from storage
-        const settings = await chrome.storage.sync.get(['distractionSites']);
+        // Get distraction and focus sites from storage
+        const settings = await chrome.storage.sync.get(['distractionSites', 'focusSites']);
         const distractionSites = (settings.distractionSites || '').split(',').map(site => site.trim()).filter(site => site);
+        const focusSites = (settings.focusSites || '').split(',').map(site => site.trim()).filter(site => site);
         
         // Calculate focus and distraction time separately
         const domainFocusTime = domainSessions
-          .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain))
+          .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
           .reduce((total, session) => total + session.duration, 0);
         
         const domainDistractionTime = domainSessions
@@ -1233,9 +1256,10 @@ function startTracking() {
       const timerState = await getTimerState();
       const timeData = await getTimeData();
       
-      // Get distraction sites from storage
-      const settings = await chrome.storage.sync.get(['distractionSites']);
+      // Get distraction and focus sites from storage
+      const settings = await chrome.storage.sync.get(['distractionSites', 'focusSites']);
       const distractionSites = (settings.distractionSites || '').split(',').map(site => site.trim()).filter(site => site);
+      const focusSites = (settings.focusSites || '').split(',').map(site => site.trim()).filter(site => site);
       
       // Only track if timer is in focus state and there's an active domain
       if (timerState.timerState === 'focus' && currentDomain) {
@@ -1331,13 +1355,14 @@ chrome.storage.onChanged.addListener(async (changes, namespace) => {
             // Prepare detailed time data for the hover modal
             const domainSessions = timeData.sessionHistory.filter(session => session.domain === currentDomain);
             
-            // Get distraction sites from storage
-            const settings = await chrome.storage.sync.get(['distractionSites']);
+            // Get distraction and focus sites from storage
+            const settings = await chrome.storage.sync.get(['distractionSites', 'focusSites']);
             const distractionSites = (settings.distractionSites || '').split(',').map(site => site.trim()).filter(site => site);
+            const focusSites = (settings.focusSites || '').split(',').map(site => site.trim()).filter(site => site);
             
             // Calculate focus and distraction time separately
             const domainFocusTime = domainSessions
-              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
               .reduce((total, session) => total + session.duration, 0);
             
             const domainDistractionTime = domainSessions
