@@ -406,9 +406,11 @@ async function stopTimer() {
 
 // Update timer display periodically
 let timerInterval = null;
+let lastTimerStateUpdate = 0;
+const TIMER_STATE_UPDATE_INTERVAL = 30000; // Update timer state in storage every 30 seconds
 
 /**
- * Starts the periodic update of timeLeft in storage
+ * Starts the periodic update of timeLeft for display and storage
  */
 function startTimerUpdates() {
   // Clear any existing interval
@@ -416,7 +418,7 @@ function startTimerUpdates() {
     clearInterval(timerInterval);
   }
   
-  // Update every second
+  // Update every second for badge display, but store less frequently
   timerInterval = setInterval(async () => {
     try {
       const state = await getTimerState();
@@ -427,15 +429,38 @@ function startTimerUpdates() {
           const remainingMs = Math.max(0, state.endTime - now);
           const remainingSecs = Math.floor(remainingMs / 1000);
           
-          // Update timeLeft in storage
-          await setTimerState({
-            timerState: state.timerState,
-            endTime: state.endTime,
-            timeLeft: remainingSecs
-          });
+          // Update the browser action badge with current session time if timer is active (every second)
+          const minutes = Math.floor(remainingSecs / 60);
+          const seconds = remainingSecs % 60;
+          const badgeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+          chrome.action.setBadgeText({ text: badgeText });
+          
+          // Use different colors for focus vs break
+          if (state.timerState === 'focus') {
+            chrome.action.setBadgeBackgroundColor({ color: '#2ecc71' }); // Green for focus
+          } else {
+            chrome.action.setBadgeBackgroundColor({ color: '#3498db' }); // Blue for break
+          }
+          
+          // Only update timer state in storage periodically to avoid quota limits
+          if (now - lastTimerStateUpdate >= TIMER_STATE_UPDATE_INTERVAL) {
+            lastTimerStateUpdate = now;
+            await setTimerState({
+              timerState: state.timerState,
+              endTime: state.endTime,
+              timeLeft: remainingSecs
+            });
+          }
           
           // If timer has reached 0, the alarm should handle the transition
           if (remainingSecs <= 0) {
+            // Update storage immediately when timer ends
+            await setTimerState({
+              timerState: state.timerState,
+              endTime: state.endTime,
+              timeLeft: 0
+            });
+            
             // Wait a moment for the alarm to process, then potentially clear the interval
             setTimeout(async () => {
               const newState = await getTimerState();
@@ -450,6 +475,7 @@ function startTimerUpdates() {
         // If not in focus or break state, stop the interval
         clearInterval(timerInterval);
         timerInterval = null;
+        chrome.action.setBadgeText({ text: '' }); // Clear badge when not focusing
       }
     } catch (error) {
       console.error('Flowbar background.js error updating timer:', error);
@@ -1301,7 +1327,9 @@ async function checkDistractionSite(tabId, url) {
   }
 }
 
-// 10-second interval to track time based on active domain and focus state (to reduce storage writes)
+
+
+// 30-second interval to track time based on active domain and focus state (to respect storage quota)
 function startTracking() {
   if (trackingInterval) {
     clearInterval(trackingInterval);
@@ -1324,7 +1352,7 @@ function startTracking() {
         const isDistractionSite = distractionSites.includes(currentDomain);
         
         // Increment the total focus time (this tracks all focus session time regardless of site)
-        timeData.totalFocusTime += 10; // Increased to account for 10-second interval
+        timeData.totalFocusTime += 30; // Increased to account for 30-second interval
         
         // Find the current session for this domain to update
         const activeSessionIndex = timeData.sessionHistory.findIndex(session => 
@@ -1335,13 +1363,13 @@ function startTracking() {
         
         if (activeSessionIndex !== -1) {
           // Update the duration of the active session
-          timeData.sessionHistory[activeSessionIndex].duration += 10; // Increased to account for 10-second interval
+          timeData.sessionHistory[activeSessionIndex].duration += 30; // Increased to account for 30-second interval
         } else {
           // Create a new ongoing session if none exists
           const newSession = {
             startTime: Date.now(),
             endTime: null, // Will be set when the session ends
-            duration: 10, // Start with 10 seconds for 10-second interval
+            duration: 30, // Start with 30 seconds for 30-second interval
             type: 'focus',
             domain: currentDomain,
             isDistraction: isDistractionSite // Track if this session was on a distraction site
@@ -1356,35 +1384,19 @@ function startTracking() {
         if (!timeData.flowScores[today]) {
           timeData.flowScores[today] = 0;
         }
-        timeData.flowScores[today] += 10; // Increased to account for 10-second interval
+        timeData.flowScores[today] += 30; // Increased to account for 30-second interval
         
-        // Save updated time data (only once every 10 seconds instead of every second)
+        // Save updated time data (only once every 30 seconds to respect storage quota)
         await setTimeData(timeData);
       } else if (timerState.timerState === 'break' && currentDomain) {
         // Optional: Track break time separately if needed
         // For now, we're only tracking focus time for the Flow Score
       }
       
-      // Update the browser action badge with current session time if timer is active
-      if (timerState.timerState === 'focus' || timerState.timerState === 'break') {
-        const minutes = Math.floor(timerState.timeLeft / 60);
-        const seconds = timerState.timeLeft % 60;
-        const badgeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-        chrome.action.setBadgeText({ text: badgeText });
-        
-        // Use different colors for focus vs break
-        if (timerState.timerState === 'focus') {
-          chrome.action.setBadgeBackgroundColor({ color: '#2ecc71' }); // Green for focus
-        } else {
-          chrome.action.setBadgeBackgroundColor({ color: '#3498db' }); // Blue for break
-        }
-      } else {
-        chrome.action.setBadgeText({ text: '' }); // Clear badge when not focusing
-      }
     } catch (error) {
       console.error('Flowbar background.js error in tracking interval:', error);
     }
-  }, 10000); // 10 second interval to reduce storage writes
+  }, 30000); // 30 second interval to respect storage quota
 }
 
 // Function to stop tracking
