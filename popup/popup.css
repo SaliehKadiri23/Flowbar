@@ -65,6 +65,12 @@ body.break .timer-display {
   color: var(--break-color);
 }
 
+/* Wind-Down State styling */
+body.wind-down .timer-display {
+  background-color: rgba(230, 126, 34, 0.1);
+  color: var(--wind-down-color);
+}
+
 /* Control Button */
 .control-button {
   padding: 12px 24px;
@@ -165,6 +171,10 @@ body.break .timer-display {
 
 .state-dot.break {
   background-color: var(--break-color);
+}
+
+.state-dot.wind-down {
+  background-color: var(--wind-down-color);
 }
 
 /* Minimalist aesthetic elements */

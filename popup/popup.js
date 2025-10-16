@@ -43,7 +43,7 @@ async function initializeTimerDisplay() {
     const endTime = result.endTime || null;
     
     // If timer is running and we have an endTime, calculate remaining time
-    if ((timerState === 'focus' || timerState === 'break') && endTime) {
+    if ((timerState === 'focus' || timerState === 'break' || timerState === 'wind-down') && endTime) {
       const now = Date.now();
       const remainingMs = Math.max(0, endTime - now);
       timeLeft = Math.floor(remainingMs / 1000);
@@ -53,7 +53,7 @@ async function initializeTimerDisplay() {
     updateUIBasedOnState(timerState, timeLeft, endTime);
     
     // If timer is running, start updating the display
-    if (timerState === 'focus' || timerState === 'break') {
+    if (timerState === 'focus' || timerState === 'break' || timerState === 'wind-down') {
       startUpdatingTimerDisplay();
     }
   } catch (error) {
@@ -107,9 +107,16 @@ function setupEventListeners() {
  * Updates the UI based on the current timer state
  */
 function updateUIBasedOnState(timerState, timeLeft, endTime) {
+  // Update the body class for state-specific styling
+  document.body.className = timerState;
+  
   // Update the button text and style based on timer state
   switch (timerState) {
     case 'focus':
+      controlButton.textContent = 'Pause Focus';
+      controlButton.className = 'control-button stop-button';
+      break;
+    case 'wind-down':
       controlButton.textContent = 'Pause Focus';
       controlButton.className = 'control-button stop-button';
       break;
@@ -148,7 +155,7 @@ function startUpdatingTimerDisplay() {
       const endTime = result.endTime || null;
       
       // Only update if timer is running
-      if (timerState === 'focus' || timerState === 'break') {
+      if (timerState === 'focus' || timerState === 'break' || timerState === 'wind-down') {
         // If we have an endTime, calculate the real-time remaining (more accurate)
         if (endTime) {
           const now = Date.now();
@@ -186,7 +193,7 @@ function setupStorageListener() {
           let end = current.endTime;
           
           // If timer is running and we have an endTime, calculate remaining time
-          if ((state === 'focus' || state === 'break') && end) {
+          if ((state === 'focus' || state === 'break' || state === 'wind-down') && end) {
             const now = Date.now();
             const remainingMs = Math.max(0, end - now);
             left = Math.floor(remainingMs / 1000);
@@ -195,7 +202,7 @@ function setupStorageListener() {
           updateUIBasedOnState(state, left, end);
           
           // If timer is running, ensure we're updating the display
-          if (state === 'focus' || state === 'break') {
+          if (state === 'focus' || state === 'break' || state === 'wind-down') {
             startUpdatingTimerDisplay();
           } else {
             // If timer is not running, stop the interval

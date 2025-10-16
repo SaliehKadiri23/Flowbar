@@ -59,6 +59,10 @@ function createFlowbarBorder(color) {
       background: linear-gradient(90deg, rgba(52, 152, 219, 0.3), rgba(41, 128, 185, 0.3)) !important;
     }
     
+    .flowbar-wind-down {
+      background: linear-gradient(90deg, rgba(241, 196, 15, 0.3), rgba(243, 156, 18, 0.3)) !important; /* Yellow-like color */
+    }
+    
     .flowbar-stopped {
       background: transparent !important;
     }
@@ -175,9 +179,16 @@ function updateAmbientBorder(timerState) {
   // Remove existing borders if they exist
   removeAmbientBorder();
   
-  // Only add borders if timer is active (focus or break)
-  if (timerState === 'focus' || timerState === 'break') {
-    const borderClass = timerState === 'focus' ? 'flowbar-focus' : 'flowbar-break';
+  // Add borders for active states (focus, break, wind-down)
+  if (timerState === 'focus' || timerState === 'break' || timerState === 'wind-down') {
+    let borderClass;
+    if (timerState === 'focus') {
+      borderClass = 'flowbar-focus';
+    } else if (timerState === 'break') {
+      borderClass = 'flowbar-break';
+    } else if (timerState === 'wind-down') {
+      borderClass = 'flowbar-wind-down';
+    }
     
     // Create border elements for each side
     const sides = ['top', 'right', 'bottom', 'left'];

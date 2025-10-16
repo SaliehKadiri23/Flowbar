@@ -226,6 +226,10 @@ async function updateAllTabsBorder(color) {
                   background: linear-gradient(90deg, rgba(52, 152, 219, 0.3), rgba(41, 128, 185, 0.3)) !important;
                 }
                 
+                .flowbar-wind-down {
+                  background: linear-gradient(90deg, rgba(241, 196, 15, 0.3), rgba(243, 156, 18, 0.3)) !important; /* Yellow-like color */
+                }
+                
                 .flowbar-stopped {
                   background: transparent !important;
                 }
@@ -365,6 +369,21 @@ async function startTimer(durationInMinutes, state) {
       when: endTime
     });
     
+    // Clear any existing wind-down alarm
+    await chrome.alarms.clear('timer_windDown');
+    
+    // For focus sessions, also create a wind-down alarm at 20% of the initial duration
+    if (state === 'focus') {
+      // Calculate 20% of the total duration in milliseconds
+      const totalDurationMs = durationInMinutes * 60 * 1000;
+      const twentyPercentTimeMs = totalDurationMs * 0.2;
+      const windDownTime = endTime - twentyPercentTimeMs; // Time when 20% of duration remains
+      
+      await chrome.alarms.create(`timer_windDown`, {
+        when: windDownTime
+      });
+    }
+    
     // Update the border color for all active tabs based on the timer state
     if (state === 'focus') {
       await updateAllTabsBorder('rgba(46, 204, 113, 0.3)'); // Green for focus state
@@ -423,7 +442,7 @@ function startTimerUpdates() {
     try {
       const state = await getTimerState();
       
-      if (state.timerState === 'focus' || state.timerState === 'break') {
+      if (state.timerState === 'focus' || state.timerState === 'break' || state.timerState === 'wind-down') {
         if (state.endTime) {
           const now = Date.now();
           const remainingMs = Math.max(0, state.endTime - now);
@@ -514,7 +533,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         }
         
         // Complete any ongoing session for the current domain
-        if (currentState.timerState === 'focus') {
+        if (currentState.timerState === 'focus' || currentState.timerState === 'wind-down') {
           const now = Date.now(); // Define 'now' variable
           const timeData = await getTimeData();
           const ongoingSessionIndex = timeData.sessionHistory.findIndex(session => 
@@ -532,7 +551,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         
         await setTimerState({ 
           timerState: 'paused', 
-          originalTimerType: currentState.timerState, // Preserve the original timer type (focus/break)
+          originalTimerType: currentState.timerState, // Preserve the original timer type (focus/break/wind-down)
           endTime: currentState.endTime, // Keep the original endTime for potential resume
           timeLeft: currentRemainingTime // Preserve the exact remaining time
         });
@@ -554,7 +573,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       // Pause the current timer - calculate and preserve the current timeLeft
       const currentState = await getTimerState();
       
-      if (currentState.timerState === 'focus' || currentState.timerState === 'break') {
+      if (currentState.timerState === 'focus' || currentState.timerState === 'break' || currentState.timerState === 'wind-down') {
         // Calculate the actual remaining time at the moment of pause
         let currentRemainingTime = currentState.timeLeft;
         if (currentState.endTime) {
@@ -564,7 +583,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         }
         
         // Complete any ongoing session for the current domain
-        if (currentState.timerState === 'focus') {
+        if (currentState.timerState === 'focus' || currentState.timerState === 'wind-down') {
           const now = Date.now(); // Define 'now' variable
           const timeData = await getTimeData();
           const ongoingSessionIndex = timeData.sessionHistory.findIndex(session => 
@@ -694,8 +713,52 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
           when: newEndTime
         });
         
+        // For focus sessions resumed from focus/wind-down state, also create a new wind-down alarm at 20% of initial duration
+        // Calculate the wind-down time based on the configured duration
+        if ((timerType === 'focus' || timerType === 'wind-down')) {
+          // Get the configured focus duration to calculate 20% of it
+          const configResult = await chrome.storage.sync.get(['focusDuration']);
+          const focusDurationSeconds = configResult.focusDuration || 25 * 60; // default to 25 min
+          const remainingSeconds = Math.floor((newEndTime - Date.now()) / 1000);
+          
+          // Calculate 20% of the original configured duration
+          const twentyPercentDuration = focusDurationSeconds * 0.2;
+          
+          // The wind-down happens when twentyPercentDuration seconds remain
+          // So wind-down time = endTime - (twentyPercentDuration * 1000)
+          const newWindDownTime = newEndTime - (twentyPercentDuration * 1000);
+          
+          // Only create the alarm if the wind-down time is still in the future
+          if (newWindDownTime > Date.now()) {
+            await chrome.alarms.create('timer_windDown', {
+              when: newWindDownTime
+            });
+          } else {
+            // If the wind-down time has already passed, update the state directly if needed
+            // Check how much time remains and if we're already in wind-down period
+            if (remainingSeconds <= twentyPercentDuration) {
+              // We're already within the wind-down period, update state accordingly
+              await setTimerState({
+                timerState: 'wind-down',
+                endTime: newEndTime,
+                timeLeft: remainingSeconds
+              });
+              await updateAllTabsBorder('rgba(241, 196, 15, 0.3)'); // Yellow-like for wind-down state
+            }
+          }
+        }
+        
         // Start updating the timer display
         startTimerUpdates();
+        
+        // Update the border color for all active tabs based on the resumed timer state
+        if (timerType === 'focus') {
+          await updateAllTabsBorder('rgba(46, 204, 113, 0.3)'); // Green for focus state
+        } else if (timerType === 'break') {
+          await updateAllTabsBorder('rgba(52, 152, 219, 0.3)'); // Blue for break state
+        } else if (timerType === 'wind-down') {
+          await updateAllTabsBorder('rgba(241, 196, 15, 0.3)'); // Yellow-like for wind-down state
+        }
       }
       
       // Update the Flow Score icon on the current active tab to reflect the resumed state (with debounce)
@@ -1523,12 +1586,39 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     // Get the current timer state
     const currentState = await getTimerState();
 
+    // Handle wind-down alarm (triggers at 20% of initial focus duration)
+    if (alarm.name === 'timer_windDown') {
+      // Make sure we're still in a focus state and the timer is still valid
+      if (currentState.timerState === 'focus' && currentState.endTime) {
+        // Calculate remaining time to ensure the alarm is still valid
+        const now = Date.now();
+        const remainingMs = currentState.endTime - now;
+        
+        // Only proceed if we're still in focus mode and the end time is still in the future
+        if (currentState.timerState === 'focus' && remainingMs >= 0) {
+          // Switch to wind-down state and update border color
+          await setTimerState({ 
+            timerState: 'wind-down', 
+            endTime: currentState.endTime,
+            timeLeft: Math.floor(remainingMs / 1000) // Update timeLeft to reflect current remaining time
+          });
+          
+          // Update border to wind-down color for all active tabs
+          await updateAllTabsBorder('rgba(241, 196, 15, 0.3)'); // Yellow-like for wind-down state
+        }
+      }
+      return;
+    }
+
+    // Handle regular timer end alarms
     // Determine the next state based on the current state
     let nextState;
     let nextDurationSeconds;
 
-    if (currentState.timerState === 'focus') {
-      // After focus, transition to break using configured duration
+    if (currentState.timerState === 'wind-down' || currentState.timerState === 'focus') {
+      // If currently in wind-down, we're transitioning from focus to break
+      // If currently in focus, we're also transitioning to break
+      // After focus (or wind-down), transition to break using configured duration
       nextState = 'break';
       nextDurationSeconds = currentState.breakDuration; // Duration in seconds
       
