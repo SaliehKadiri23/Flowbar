@@ -951,6 +951,23 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
       
       // Send response back to popup
       return Promise.resolve({ success: true });
+    } else if (request.action === 'getTimerInfo') {
+      // Return current timer state and time left for sanctuary page
+      const state = await getTimerState();
+      return Promise.resolve({ 
+        timeLeft: state.timeLeft,
+        timerState: state.timerState
+      });
+    } else if (request.action === 'allowDistractionFor60s') {
+      // Allow distraction site for 60 seconds
+      if (request.site) {
+        const expiryTime = Date.now() + (60 * 1000); // 60 seconds from now
+        await chrome.storage.local.set({
+          [`tempAccess_${request.site}`]: expiryTime
+        });
+        return Promise.resolve({ success: true });
+      }
+      return Promise.resolve({ success: false, error: 'No site provided' });
     }
   } catch (error) {
     console.error('Flowbar background.js error handling message:', error);
@@ -1059,6 +1076,14 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 
 // Listener for tab updates (when URL changes in current tab)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (tab.url) {
+    // Check for distraction site immediately when URL starts loading
+    const isDistractionRedirected = await checkDistractionSite(tabId, tab.url);
+    if (isDistractionRedirected) {
+      return; // Exit early if redirected to sanctuary
+    }
+  }
+  
   if (changeInfo.status === 'complete' && tab.active && tab.windowId === (await chrome.windows.getCurrent()).id) {
     currentActiveTabId = tabId;
     if (tab.url) {
@@ -1244,7 +1269,39 @@ async function initializeActiveTab() {
   }
 }
 
-// 1-second interval to track time based on active domain and focus state
+// Function to check if the current navigation is to a distraction site during focus
+async function checkDistractionSite(tabId, url) {
+  try {
+    // Get current timer state and distraction sites
+    const [timerState, settings] = await Promise.all([
+      getTimerState(),
+      chrome.storage.sync.get(['distractionSites'])
+    ]);
+    
+    const distractionSites = (settings.distractionSites || '').split(',').map(site => site.trim()).filter(site => site);
+    const currentDomain = new URL(url).hostname;
+    
+    // Check if we're in focus state and the site is in distraction list
+    if (timerState.timerState === 'focus' && distractionSites.includes(currentDomain)) {
+      // Check if this domain has been granted temporary access (for 60 seconds)
+      const tempAccess = await chrome.storage.local.get([`tempAccess_${currentDomain}`]);
+      const now = Date.now();
+      
+      if (!tempAccess[`tempAccess_${currentDomain}`] || now > tempAccess[`tempAccess_${currentDomain}`]) {
+        // Redirect to sanctuary page
+        const sanctuaryUrl = chrome.runtime.getURL('sanctuary.html?site=' + encodeURIComponent(currentDomain) + '&url=' + encodeURIComponent(url));
+        chrome.tabs.update(tabId, { url: sanctuaryUrl });
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error('Flowbar background.js error checking distraction site:', error);
+    return false;
+  }
+}
+
+// 10-second interval to track time based on active domain and focus state (to reduce storage writes)
 function startTracking() {
   if (trackingInterval) {
     clearInterval(trackingInterval);
@@ -1267,7 +1324,7 @@ function startTracking() {
         const isDistractionSite = distractionSites.includes(currentDomain);
         
         // Increment the total focus time (this tracks all focus session time regardless of site)
-        timeData.totalFocusTime += 1;
+        timeData.totalFocusTime += 10; // Increased to account for 10-second interval
         
         // Find the current session for this domain to update
         const activeSessionIndex = timeData.sessionHistory.findIndex(session => 
@@ -1278,13 +1335,13 @@ function startTracking() {
         
         if (activeSessionIndex !== -1) {
           // Update the duration of the active session
-          timeData.sessionHistory[activeSessionIndex].duration += 1;
+          timeData.sessionHistory[activeSessionIndex].duration += 10; // Increased to account for 10-second interval
         } else {
           // Create a new ongoing session if none exists
           const newSession = {
             startTime: Date.now(),
             endTime: null, // Will be set when the session ends
-            duration: 1,
+            duration: 10, // Start with 10 seconds for 10-second interval
             type: 'focus',
             domain: currentDomain,
             isDistraction: isDistractionSite // Track if this session was on a distraction site
@@ -1299,9 +1356,9 @@ function startTracking() {
         if (!timeData.flowScores[today]) {
           timeData.flowScores[today] = 0;
         }
-        timeData.flowScores[today] += 1; // Increment by 1 second
+        timeData.flowScores[today] += 10; // Increased to account for 10-second interval
         
-        // Save updated time data
+        // Save updated time data (only once every 10 seconds instead of every second)
         await setTimeData(timeData);
       } else if (timerState.timerState === 'break' && currentDomain) {
         // Optional: Track break time separately if needed
@@ -1327,7 +1384,7 @@ function startTracking() {
     } catch (error) {
       console.error('Flowbar background.js error in tracking interval:', error);
     }
-  }, 1000); // 1 second interval
+  }, 10000); // 10 second interval to reduce storage writes
 }
 
 // Function to stop tracking
