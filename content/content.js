@@ -347,6 +347,42 @@ function createHoverModal(modalContent, options = {}) {
   return modal;
 }
 
+/**
+ * Checks if a domain matches any of the configured sites, considering both www and non-www versions
+ * @param {string} domain - The domain to check (e.g., 'www.google.com' or 'google.com')
+ * @param {Array<string>} siteList - List of configured sites to match against
+ * @returns {boolean} - True if the domain matches any site in the list
+ */
+function matchesDomain(domain, siteList) {
+  // If the domain is empty, return false
+  if (!domain) return false;
+  
+  // Normalize the domain by removing any trailing dots and converting to lowercase
+  const normalizedDomain = domain.toLowerCase().replace(/\.$/, '');
+  
+  // Check if the normalized domain is in the list
+  if (siteList.includes(normalizedDomain)) {
+    return true;
+  }
+  
+  // Check for www/non-www variations
+  if (normalizedDomain.startsWith('www.')) {
+    // Domain starts with www, also check the non-www version
+    const nonWwwDomain = normalizedDomain.substring(4); // Remove 'www.'
+    if (siteList.includes(nonWwwDomain)) {
+      return true;
+    }
+  } else {
+    // Domain does not start with www, also check the www version
+    const wwwDomain = 'www.' + normalizedDomain;
+    if (siteList.includes(wwwDomain)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 // Function to update the flow score icon and its hover modal based on current state
 async function updateFlowScoreIcon() {
   // Get the current timer state to know if we're in focus mode
@@ -377,11 +413,11 @@ async function updateFlowScoreIcon() {
       
       // Calculate focus time and distraction time separately for this domain
       const domainFocusTime = domainSessions
-        .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain))
+        .filter(session => session.type === 'focus' && !matchesDomain(session.domain, distractionSites))
         .reduce((total, session) => total + session.duration, 0);
       
       const domainDistractionTime = domainSessions
-        .filter(session => session.type === 'focus' && distractionSites.includes(session.domain))
+        .filter(session => session.type === 'focus' && matchesDomain(session.domain, distractionSites))
         .reduce((total, session) => total + session.duration, 0);
       
       // Calculate overall score based on balance of focus vs distraction time
@@ -389,7 +425,7 @@ async function updateFlowScoreIcon() {
       
       if (totalTime === 0) {
         flowScore = 0; // No time spent on this domain
-      } else if (distractionSites.includes(currentDomain)) {
+      } else if (matchesDomain(currentDomain, distractionSites)) {
         // For distraction sites, heavily penalize the score
         const hoursSpent = totalTime / 3600; // Convert to hours
         
@@ -466,11 +502,11 @@ async function updateFlowScoreIcon() {
       
       // Calculate focus and distraction time separately
       const domainFocusTime = domainSessions
-        .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
+        .filter(session => session.type === 'focus' && !matchesDomain(session.domain, distractionSites) && !matchesDomain(session.domain, focusSites))
         .reduce((total, session) => total + session.duration, 0);
       
       const domainDistractionTime = domainSessions
-        .filter(session => session.type === 'focus' && distractionSites.includes(session.domain))
+        .filter(session => session.type === 'focus' && matchesDomain(session.domain, distractionSites))
         .reduce((total, session) => total + session.duration, 0);
       
       const focusHours = Math.floor(domainFocusTime / 3600);
@@ -479,7 +515,7 @@ async function updateFlowScoreIcon() {
       const distractionMinutes = Math.floor((domainDistractionTime % 3600) / 60);
       
       // Determine if current domain is a distraction site
-      const isCurrentDistraction = distractionSites.includes(currentDomain);
+      const isCurrentDistraction = matchesDomain(currentDomain, distractionSites);
       
       const modalContent = `
         <div class="flowbar-modal-header">

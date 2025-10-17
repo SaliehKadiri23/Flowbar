@@ -62,11 +62,11 @@ async function calculateFlowScore(domain, timeData) {
     
     // Calculate focus time and distraction time separately for this domain
     const domainFocusTime = domainSessions
-      .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain))
+      .filter(session => session.type === 'focus' && !matchesDomain(session.domain, distractionSites))
       .reduce((total, session) => total + session.duration, 0);
     
     const domainDistractionTime = domainSessions
-      .filter(session => session.type === 'focus' && distractionSites.includes(session.domain))
+      .filter(session => session.type === 'focus' && matchesDomain(session.domain, distractionSites))
       .reduce((total, session) => total + session.duration, 0);
     
     // Calculate overall score based on balance of focus vs distraction time
@@ -78,7 +78,7 @@ async function calculateFlowScore(domain, timeData) {
     
     // Calculate score: higher focus time = higher score, higher distraction time = lower score
     // For distraction sites, heavily penalize the score
-    if (distractionSites.includes(domain)) {
+    if (matchesDomain(domain, distractionSites)) {
       // For distraction sites, the more time spent, the lower the score
       const hoursSpent = totalTime / 3600; // Convert to hours
       
@@ -94,7 +94,7 @@ async function calculateFlowScore(domain, timeData) {
       } else {
         return 50;  // Less than 15 min
       }
-    } else if (focusSites.includes(domain)) {
+    } else if (matchesDomain(domain, focusSites)) {
       // For focus sites, reward the score based on time spent
       const hoursSpent = totalTime / 3600; // Convert to hours
       
@@ -276,6 +276,42 @@ async function updateAllTabsBorder(color) {
   } catch (error) {
     console.error('Flowbar background.js error updating tabs border:', error);
   }
+}
+
+/**
+ * Checks if a domain matches any of the configured sites, considering both www and non-www versions
+ * @param {string} domain - The domain to check (e.g., 'www.google.com' or 'google.com')
+ * @param {Array<string>} siteList - List of configured sites to match against
+ * @returns {boolean} - True if the domain matches any site in the list
+ */
+function matchesDomain(domain, siteList) {
+  // If the domain is empty, return false
+  if (!domain) return false;
+  
+  // Normalize the domain by removing any trailing dots and converting to lowercase
+  const normalizedDomain = domain.toLowerCase().replace(/\.$/, '');
+  
+  // Check if the normalized domain is in the list
+  if (siteList.includes(normalizedDomain)) {
+    return true;
+  }
+  
+  // Check for www/non-www variations
+  if (normalizedDomain.startsWith('www.')) {
+    // Domain starts with www, also check the non-www version
+    const nonWwwDomain = normalizedDomain.substring(4); // Remove 'www.'
+    if (siteList.includes(nonWwwDomain)) {
+      return true;
+    }
+  } else {
+    // Domain does not start with www, also check the www version
+    const wwwDomain = 'www.' + normalizedDomain;
+    if (siteList.includes(wwwDomain)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 /**
@@ -633,11 +669,11 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             
             // Calculate focus and distraction time separately
             const domainFocusTime = domainSessions
-              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && !matchesDomain(session.domain, distractionSites) && !matchesDomain(session.domain, focusSites))
               .reduce((total, session) => total + session.duration, 0);
             
             const domainDistractionTime = domainSessions
-              .filter(session => session.type === 'focus' && distractionSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && matchesDomain(session.domain, distractionSites))
               .reduce((total, session) => total + session.duration, 0);
             
             const focusHours = Math.floor(domainFocusTime / 3600);
@@ -646,7 +682,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             const distractionMinutes = Math.floor((domainDistractionTime % 3600) / 60);
             
             // Determine if current domain is a distraction site
-            const isCurrentDistraction = distractionSites.includes(currentDomain);
+            const isCurrentDistraction = matchesDomain(currentDomain, distractionSites);
             
             const modalContent = `
               <div class="flowbar-modal-header">
@@ -780,11 +816,11 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             
             // Calculate focus and distraction time separately
             const domainFocusTime = domainSessions
-              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && !matchesDomain(session.domain, distractionSites) && !matchesDomain(session.domain, focusSites))
               .reduce((total, session) => total + session.duration, 0);
             
             const domainDistractionTime = domainSessions
-              .filter(session => session.type === 'focus' && distractionSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && matchesDomain(session.domain, distractionSites))
               .reduce((total, session) => total + session.duration, 0);
             
             const focusHours = Math.floor(domainFocusTime / 3600);
@@ -793,7 +829,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             const distractionMinutes = Math.floor((domainDistractionTime % 3600) / 60);
             
             // Determine if current domain is a distraction site
-            const isCurrentDistraction = distractionSites.includes(currentDomain);
+            const isCurrentDistraction = matchesDomain(currentDomain, distractionSites);
             
             const modalContent = `
               <div class="flowbar-modal-header">
@@ -880,11 +916,11 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             
             // Calculate focus and distraction time separately
             const domainFocusTime = domainSessions
-              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && !matchesDomain(session.domain, distractionSites) && !matchesDomain(session.domain, focusSites))
               .reduce((total, session) => total + session.duration, 0);
             
             const domainDistractionTime = domainSessions
-              .filter(session => session.type === 'focus' && distractionSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && matchesDomain(session.domain, distractionSites))
               .reduce((total, session) => total + session.duration, 0);
             
             const focusHours = Math.floor(domainFocusTime / 3600);
@@ -893,7 +929,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             const distractionMinutes = Math.floor((domainDistractionTime % 3600) / 60);
             
             // Determine if current domain is a distraction site
-            const isCurrentDistraction = distractionSites.includes(currentDomain);
+            const isCurrentDistraction = matchesDomain(currentDomain, distractionSites);
             
             const modalContent = `
               <div class="flowbar-modal-header">
@@ -984,11 +1020,11 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             
             // Calculate focus and distraction time separately
             const domainFocusTime = domainSessions
-              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && !matchesDomain(session.domain, distractionSites) && !matchesDomain(session.domain, focusSites))
               .reduce((total, session) => total + session.duration, 0);
             
             const domainDistractionTime = domainSessions
-              .filter(session => session.type === 'focus' && distractionSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && matchesDomain(session.domain, distractionSites))
               .reduce((total, session) => total + session.duration, 0);
             
             const focusHours = Math.floor(domainFocusTime / 3600);
@@ -997,7 +1033,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
             const distractionMinutes = Math.floor((domainDistractionTime % 3600) / 60);
             
             // Determine if current domain is a distraction site
-            const isCurrentDistraction = distractionSites.includes(currentDomain);
+            const isCurrentDistraction = matchesDomain(currentDomain, distractionSites);
             
             const modalContent = `
               <div class="flowbar-modal-header">
@@ -1371,7 +1407,7 @@ async function checkDistractionSite(tabId, url) {
     const currentDomain = new URL(url).hostname;
     
     // Check if we're in focus state and the site is in distraction list
-    if (timerState.timerState === 'focus' && distractionSites.includes(currentDomain)) {
+    if (timerState.timerState === 'focus' && matchesDomain(currentDomain, distractionSites)) {
       // Check if this domain has been granted temporary access (for 60 seconds)
       const tempAccess = await chrome.storage.local.get([`tempAccess_${currentDomain}`]);
       const now = Date.now();
@@ -1412,7 +1448,7 @@ function startTracking() {
       // Only track if timer is in focus state and there's an active domain
       if (timerState.timerState === 'focus' && currentDomain) {
         // Check if current domain is in distraction sites
-        const isDistractionSite = distractionSites.includes(currentDomain);
+        const isDistractionSite = matchesDomain(currentDomain, distractionSites);
         
         // Increment the total focus time (this tracks all focus session time regardless of site)
         timeData.totalFocusTime += 30; // Increased to account for 30-second interval
@@ -1494,11 +1530,11 @@ chrome.storage.onChanged.addListener(async (changes, namespace) => {
             
             // Calculate focus and distraction time separately
             const domainFocusTime = domainSessions
-              .filter(session => session.type === 'focus' && !distractionSites.includes(session.domain) && !focusSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && !matchesDomain(session.domain, distractionSites) && !matchesDomain(session.domain, focusSites))
               .reduce((total, session) => total + session.duration, 0);
             
             const domainDistractionTime = domainSessions
-              .filter(session => session.type === 'focus' && distractionSites.includes(session.domain))
+              .filter(session => session.type === 'focus' && matchesDomain(session.domain, distractionSites))
               .reduce((total, session) => total + session.duration, 0);
             
             const focusHours = Math.floor(domainFocusTime / 3600);
@@ -1507,7 +1543,7 @@ chrome.storage.onChanged.addListener(async (changes, namespace) => {
             const distractionMinutes = Math.floor((domainDistractionTime % 3600) / 60);
             
             // Determine if current domain is a distraction site
-            const isCurrentDistraction = distractionSites.includes(currentDomain);
+            const isCurrentDistraction = matchesDomain(currentDomain, distractionSites);
             
             const modalContent = `
               <div class="flowbar-modal-header">
