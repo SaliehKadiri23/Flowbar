@@ -1563,8 +1563,27 @@ chrome.runtime.onStartup.addListener(async () => {
   startTracking();
 });
 
-// When extension is installed, set default durations
-chrome.runtime.onInstalled.addListener(async () => {
+// When extension is installed, set default durations and handle first-time installation
+chrome.runtime.onInstalled.addListener(async (details) => {
+  // Check if this is a first-time installation
+  if (details.reason === 'install') {
+    // Set a flag to indicate first-time installation
+    await chrome.storage.local.set({ firstInstall: true });
+    
+    // Open options page for first-time setup
+    try {
+      await chrome.runtime.openOptionsPage();
+    } catch (error) {
+      console.error('Flowbar background.js error opening options page on install:', error);
+      // Fallback to creating a tab if openOptionsPage fails
+      try {
+        await chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') });
+      } catch (fallbackError) {
+        console.error('Flowbar background.js error with fallback options page:', fallbackError);
+      }
+    }
+  }
+  
   // Set default durations
   chrome.storage.sync.get(['focusDuration', 'breakDuration']).then((result) => {
     if (!result.focusDuration) {

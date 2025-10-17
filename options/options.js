@@ -1,9 +1,37 @@
 // Flowbar Options Page Logic
 
 document.addEventListener('DOMContentLoaded', async () => {
+  await checkFirstInstall();
   await loadSettings();
   setupEventListeners();
 });
+
+/** 
+ * Checks if this is the first install and shows welcome message if needed
+ */
+async function checkFirstInstall() {
+  try {
+    const result = await chrome.storage.local.get(['firstInstall']);
+    
+    // Get the welcome message element
+    const welcomeMessage = document.getElementById('welcomeMessage');
+    
+    if (result.firstInstall) {
+      // Show the welcome message for first-time visitors
+      welcomeMessage.style.display = 'block';
+      // Update the heading to be more welcoming
+      document.querySelector('h1').textContent = 'Welcome to Flowbar';
+      
+      // Remove the firstInstall flag so it doesn't show again
+      await chrome.storage.local.remove(['firstInstall']);
+    } else {
+      // Hide the welcome message for returning visitors
+      welcomeMessage.style.display = 'none';
+    }
+  } catch (error) {
+    console.error("Flowbar options.js error checking first install:", error);
+  }
+}
 
 /** 
  * Loads the saved settings from storage

@@ -14,7 +14,30 @@ body {
 h1 {
   text-align: center;
   color: #2c3e50;
+  margin-bottom: 20px;
+}
+
+.welcome-message {
   margin-bottom: 30px;
+  padding: 15px;
+  background-color: #e8f4fc;
+  border-radius: 8px;
+  border-left: 4px solid #3498db;
+  display: block; /* Default to visible, JS will hide if not first install */
+}
+
+.welcome-message p {
+  margin: 10px 0;
+  color: #34495e;
+  line-height: 1.5;
+}
+
+.welcome-message p:first-child {
+  margin-top: 0;
+}
+
+.welcome-message p:last-child {
+  margin-bottom: 0;
 }
 
 .setting-group {
