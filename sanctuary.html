@@ -30,6 +30,8 @@
       --overlay-bg: rgba(0, 0, 0, 0.8);
       --overlay-card-bg: rgba(255, 255, 255, 0.95);
       --overlay-card-text: #1a1a2e;
+      --redirect-gradient-start: #2b3a67;
+      --redirect-gradient-end: #4d79ff;
       --breathing-circle-bg: rgba(77, 121, 255, 0.3);
       --breathing-circle-border: rgba(77, 121, 255, 0.5);
       --site-tag-bg: rgba(0, 0, 0, 0.25);
@@ -61,6 +63,8 @@
       --overlay-bg: rgba(0, 0, 0, 0.85);
       --overlay-card-bg: rgba(15, 23, 42, 0.95);
       --overlay-card-text: #f8fafc;
+      --redirect-gradient-start: #60a5fa;
+      --redirect-gradient-end: #34d399;
       --breathing-circle-bg: rgba(96, 165, 250, 0.3);
       --breathing-circle-border: rgba(96, 165, 250, 0.5);
       --site-tag-bg: rgba(0, 0, 0, 0.1);
@@ -283,6 +287,7 @@
     .btn-primary {
       background: var(--button-primary-bg);
       color: var(--button-primary-text);
+      border: 1px solid white;
     }
 
     .btn-secondary {
@@ -441,7 +446,7 @@
     .redirect-content h2 {
       margin-bottom: 1rem;
       font-size: 1.5rem;
-      background: linear-gradient(90deg, #2b3a67, #4d79ff);
+      background: linear-gradient(90deg, var(--redirect-gradient-start), var(--redirect-gradient-end));
       -webkit-background-clip: text;
       background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -449,7 +454,7 @@
 
     .redirect-content p {
       margin-bottom: 1.5rem;
-      color: rgba(0, 0, 0, 0.7);
+      color: var(--overlay-card-text);
     }
 
     .bouncing-balls {

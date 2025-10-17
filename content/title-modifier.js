@@ -530,6 +530,52 @@ function detectColorScheme() {
   return isDarkMode;
 }
 
+/**
+ * Updates the theme of the hover modal based on extension theme
+ * @param {string} theme - The theme to apply ('light' or 'dark')
+ */
+function updateModalTheme(theme) {
+  const modal = document.getElementById("flowbar-hover-modal");
+  if (!modal) return;
+  
+  // Determine theme values
+  const isDark = theme === 'dark';
+  const themeValues = isDark 
+    ? {
+        background: "rgba(23, 25, 35, 0.85)",
+        border: "rgba(255, 255, 255, 0.08)",
+        shadow: "rgba(0, 0, 0, 0.4)",
+        highlight: "rgba(255, 255, 255, 0.05)",
+        text: "#ffffff",
+        textSecondary: "rgba(255, 255, 255, 0.7)",
+      }
+    : {
+        background: "rgba(255, 255, 255, 0.85)",
+        border: "rgba(0, 0, 0, 0.06)",
+        shadow: "rgba(0, 0, 0, 0.1)",
+        highlight: "rgba(255, 255, 255, 0.8)",
+        text: "#1A1D2C",
+        textSecondary: "rgba(26, 29, 44, 0.7)",
+      };
+      
+  // Update modal styles
+  modal.style.background = themeValues.background;
+  modal.style.boxShadow = `0 8px 32px ${themeValues.shadow}, 0 0 0 1px ${themeValues.border}`;
+  
+  // Update inner container text color
+  const innerContainer = modal.querySelector(".flowbar-modal-inner");
+  if (innerContainer) {
+    innerContainer.style.color = themeValues.text;
+  }
+  
+  // Update close button
+  const closeButton = modal.querySelector(".flowbar-modal-close");
+  if (closeButton) {
+    closeButton.style.background = themeValues.highlight;
+    closeButton.style.color = themeValues.textSecondary;
+  }
+}
+
 // Export functions for use in other parts of the extension
 // For content scripts, we'll attach to the window object
 if (typeof module !== "undefined" && module.exports) {
@@ -539,6 +585,7 @@ if (typeof module !== "undefined" && module.exports) {
     createHoverModal,
     animateFlowScoreIcon,
     detectColorScheme,
+    updateModalTheme,
   };
 } else {
   // For browser environment, attach to window
@@ -548,5 +595,6 @@ if (typeof module !== "undefined" && module.exports) {
     createHoverModal,
     animateFlowScoreIcon,
     detectColorScheme,
+    updateModalTheme,
   };
 }

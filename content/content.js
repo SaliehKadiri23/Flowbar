@@ -567,6 +567,16 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
       updateFlowScoreIcon();
     }
   }
+  
+  // Handle theme changes
+  if (namespace === 'sync' && changes.theme) {
+    const newTheme = changes.theme.newValue;
+    
+    // Update modal theme if title-modifier functions are available
+    if (window.flowbarTitleModifier && typeof window.flowbarTitleModifier.updateModalTheme === 'function') {
+      window.flowbarTitleModifier.updateModalTheme(newTheme);
+    }
+  }
 });
 
 // Initialize both border and flow score icon based on the current state when the script loads
