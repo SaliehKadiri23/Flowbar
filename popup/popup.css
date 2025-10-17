@@ -1,5 +1,3 @@
-/* Flowbar Popup Styles - 2025 Modern UI */
-
 :root {
   /* Modern Color Scheme - Light Mode */
   --focus-color: #22c55e;      /* Focus State Color */
@@ -56,6 +54,7 @@ body {
   transition: all 0.3s var(--transition-smooth);
   overflow-x: hidden;
   position: relative;
+  /* border-radius: 30px; */
 }
 
 /* Theme Toggle */
@@ -123,13 +122,14 @@ body {
 }
 
 .app-title {
-  font-size: 1.5rem;
+  font-size: 2.5rem;
   font-weight: 700;
   background: var(--header-gradient);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   letter-spacing: -0.02em;
+  margin-left: 40px;
 }
 
 /* Settings Icon */
@@ -172,18 +172,20 @@ body {
   flex-direction: column;
   align-items: center;
   overflow: hidden;
+  /* margin: 20px; */
 }
 
 /* Timer Container */
 .timer-container {
   display: flex;
   align-items: center;
+  flex-direction: column;
   justify-content: center;
   width: 100%;
-  gap: 16px;
+  /* gap: 16px; */
   position: relative;
   z-index: 2;
-  margin: 24px 0;
+  margin: 24px;
 }
 
 /* Timer Display */
@@ -192,6 +194,7 @@ body {
   font-weight: 700;
   text-align: center;
   min-height: 80px;
+  margin-top: 20px;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -154,6 +154,9 @@
       position: relative;
       overflow: hidden;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
+      display: flex;
+      justify-content: center;
+      flex-direction: column;
     }
 
     .container::before {
@@ -173,7 +176,7 @@
     }
 
     .site-tag {
-      display: inline-flex;
+      display: block;
       align-items: center;
       background: var(--site-tag-bg);
       padding: 0.75rem 1.25rem;
@@ -187,6 +190,7 @@
       position: relative;
       overflow: hidden;
       border: 1px solid rgba(255, 255, 255, 0.1);
+      margin: 0 auto 0 auto
     }
 
     .site-tag::before {
@@ -387,6 +391,7 @@
       color: var(--text-secondary);
       opacity: 0.8;
       transition: opacity 0.3s ease;
+      padding-top: 15px;
     }
 
     .breathing-animation:hover .breathing-text {
@@ -558,10 +563,7 @@
   </style>
 </head>
 <body>
-  <div class="theme-toggle" id="themeToggle" title="Toggle Dark Mode">
-    <span class="material-symbols-rounded light-icon">light_mode</span>
-    <span class="material-symbols-rounded dark-icon">dark_mode</span>
-  </div>
+  
 
   <div class="container" id="mainContent">
     <h1>Focus Sanctuary</h1>
@@ -569,7 +571,7 @@
     
     <div class="site-tag" id="currentSite">Loading site...</div>
     
-    <div class="timer-container">
+    <!-- <div class="timer-container">
       <div class="timer-ring">
         <svg viewBox="0 0 160 160">
           <circle class="bg" cx="80" cy="80" r="70"></circle>
@@ -577,7 +579,7 @@
         </svg>
         <div class="timer-display" id="timerDisplay">--:--</div>
       </div>
-    </div>
+    </div> -->
     
     <div class="buttons">
       <button class="btn-primary" id="returnToWork">

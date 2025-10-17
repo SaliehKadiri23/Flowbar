@@ -108,21 +108,45 @@ async function initializeTimerDisplay() {
  */
 async function loadSessionStats() {
   try {
-    const result = await chrome.storage.sync.get(['focusSessionsCompleted', 'totalFocusTime']);
-    const focusSessions = result.focusSessionsCompleted || 0;
-    const totalFocusTime = result.totalFocusTime || 0; // in seconds
+    // Get the time data from local storage
+    const timeDataResult = await chrome.storage.local.get(['timeData']);
+    const timeData = timeDataResult.timeData || {
+      flowScores: {},
+      totalFocusTime: 0,
+      sessionHistory: []
+    };
+    
+    // Get today's date for filtering (YYYY-MM-DD format)
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Filter completed focus sessions for today
+    const todayFocusSessions = timeData.sessionHistory.filter(session => {
+      // Check if session is completed (has endTime) and of type focus
+      if (session.type === 'focus' && session.endTime) {
+        // Convert the endTime to date string and compare with today
+        const sessionDate = new Date(session.endTime).toISOString().split('T')[0];
+        return sessionDate === today;
+      }
+      return false;
+    });
+    
+    // Count completed focus sessions for today
+    const focusSessionsToday = todayFocusSessions.length;
+    
+    // Calculate total focus time for today (in seconds)
+    const totalFocusTimeToday = todayFocusSessions.reduce((total, session) => total + session.duration, 0);
     
     // Update the UI
-    focusCountElement.textContent = focusSessions;
+    focusCountElement.textContent = focusSessionsToday;
     
-    // Format total time
-    if (totalFocusTime < 60) {
-      totalTimeElement.textContent = `${totalFocusTime}s`;
-    } else if (totalFocusTime < 3600) {
-      totalTimeElement.textContent = `${Math.floor(totalFocusTime / 60)}m`;
+    // Format total time for today
+    if (totalFocusTimeToday < 60) {
+      totalTimeElement.textContent = `${totalFocusTimeToday}s`;
+    } else if (totalFocusTimeToday < 3600) {
+      totalTimeElement.textContent = `${Math.floor(totalFocusTimeToday / 60)}m`;
     } else {
-      const hours = Math.floor(totalFocusTime / 3600);
-      const minutes = Math.floor((totalFocusTime % 3600) / 60);
+      const hours = Math.floor(totalFocusTimeToday / 3600);
+      const minutes = Math.floor((totalFocusTimeToday % 3600) / 60);
       totalTimeElement.textContent = `${hours}h ${minutes}m`;
     }
   } catch (error) {
@@ -372,15 +396,15 @@ function setupStorageListener() {
         })();
       }
       
-      // Check if session stats have changed
-      if (changes.focusSessionsCompleted || changes.totalFocusTime) {
-        loadSessionStats();
-      }
-      
       // Check if theme has changed
       if (changes.theme) {
         document.documentElement.setAttribute('data-theme', changes.theme.newValue);
       }
+    }
+    
+    // Listen for changes to timeData in local storage (for session stats)
+    if (namespace === 'local' && changes.timeData) {
+      loadSessionStats();
     }
   });
 }
