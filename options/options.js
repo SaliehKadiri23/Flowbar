@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await checkFirstInstall();
   await loadSettings();
   setupEventListeners();
+  setupSliders();
 });
 
 /** 
@@ -60,6 +61,69 @@ async function loadSettings() {
  */
 function setupEventListeners() {
   document.getElementById('saveButton').addEventListener('click', saveSettings);
+  
+  // Sync number inputs with sliders
+  document.getElementById('focusDurationSlider').addEventListener('input', (e) => {
+    document.getElementById('focusDuration').value = e.target.value;
+  });
+  
+  document.getElementById('breakDurationSlider').addEventListener('input', (e) => {
+    document.getElementById('breakDuration').value = e.target.value;
+  });
+  
+  document.getElementById('focusDuration').addEventListener('input', (e) => {
+    document.getElementById('focusDurationSlider').value = e.target.value;
+  });
+  
+  document.getElementById('breakDuration').addEventListener('input', (e) => {
+    document.getElementById('breakDurationSlider').value = e.target.value;
+  });
+  
+  // Custom increment/decrement buttons for focus duration
+  document.getElementById('focusDurationIncrease').addEventListener('click', () => {
+    const input = document.getElementById('focusDuration');
+    const currentValue = parseInt(input.value) || 0;
+    const newValue = Math.min(currentValue + 1, parseInt(input.max));
+    input.value = newValue;
+    document.getElementById('focusDurationSlider').value = newValue;
+  });
+  
+  document.getElementById('focusDurationDecrease').addEventListener('click', () => {
+    const input = document.getElementById('focusDuration');
+    const currentValue = parseInt(input.value) || 0;
+    const newValue = Math.max(currentValue - 1, parseInt(input.min));
+    input.value = newValue;
+    document.getElementById('focusDurationSlider').value = newValue;
+  });
+  
+  // Custom increment/decrement buttons for break duration
+  document.getElementById('breakDurationIncrease').addEventListener('click', () => {
+    const input = document.getElementById('breakDuration');
+    const currentValue = parseInt(input.value) || 0;
+    const newValue = Math.min(currentValue + 1, parseInt(input.max));
+    input.value = newValue;
+    document.getElementById('breakDurationSlider').value = newValue;
+  });
+  
+  document.getElementById('breakDurationDecrease').addEventListener('click', () => {
+    const input = document.getElementById('breakDuration');
+    const currentValue = parseInt(input.value) || 0;
+    const newValue = Math.max(currentValue - 1, parseInt(input.min));
+    input.value = newValue;
+    document.getElementById('breakDurationSlider').value = newValue;
+  });
+}
+
+/**
+ * Sets up the sliders with the current values
+ */
+function setupSliders() {
+  // Initialize sliders with current values
+  const focusDuration = document.getElementById('focusDuration').value;
+  const breakDuration = document.getElementById('breakDuration').value;
+  
+  document.getElementById('focusDurationSlider').value = focusDuration;
+  document.getElementById('breakDurationSlider').value = breakDuration;
 }
 
 /** 
@@ -80,28 +144,38 @@ async function saveSettings() {
       focusSites: focusSites
     });
     
-    // Show status message
+    // Show status message with icon
     const status = document.getElementById('status');
-    status.textContent = 'Settings saved!';
+    status.innerHTML = '<span class="icon">✅</span> Settings saved successfully!';
     status.className = 'status success';
     
-    // Clear status after 2 seconds
+    // Add a subtle animation effect
+    document.getElementById('saveButton').classList.add('saved');
+    
+    // Clear status after 2.5 seconds
     setTimeout(() => {
       status.textContent = '';
       status.className = 'status';
-    }, 2000);
+      document.getElementById('saveButton').classList.remove('saved');
+    }, 2500);
   } catch (error) {
     console.error("Flowbar options.js error saving settings:", error);
     
-    // Show error status
+    // Show error status with icon
     const status = document.getElementById('status');
-    status.textContent = 'Error saving settings!';
+    status.innerHTML = '<span class="icon">❌</span> Error saving settings!';
     status.className = 'status error';
     
-    // Clear status after 2 seconds
+    // Clear status after 3.5 seconds
     setTimeout(() => {
       status.textContent = '';
       status.className = 'status';
-    }, 2000);
+    }, 3500);
+    
+    // Original timeout code - commented out to avoid duplicate
+    /*setTimeout(() => {
+      status.textContent = '';
+      status.className = 'status';
+    }, 2000);*/
   }
 }

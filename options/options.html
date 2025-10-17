@@ -1,43 +1,194 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Flowbar Settings</title>
-  <link rel="stylesheet" href="options.css">
-</head>
-<body>
-  <div class="container">
-    <h1>Flowbar Settings</h1>
-    <div id="welcomeMessage" class="welcome-message">
-      <p>Thanks for installing Flowbar! You're taking the first step towards protecting your focus and creating a calm, sustainable relationship with your work.</p>
-      <p>Configure your settings below to customize your focus and break sessions:</p>
-    </div>
-    
-    <div class="setting-group">
-      <label for="focusDuration">Focus Duration (minutes):</label>
-      <input type="number" id="focusDuration" min="1" max="60" value="25">
-    </div>
-    
-    <div class="setting-group">
-      <label for="breakDuration">Break Duration (minutes):</label>
-      <input type="number" id="breakDuration" min="1" max="30" value="5">
-    </div>
-    
-    <div class="setting-group">
-      <label for="distractionSites">Distraction Sites (comma separated, e.g., twitter.com,facebook.com):</label>
-      <textarea id="distractionSites" placeholder="example.com&#10;anothersite.com" rows="4"></textarea>
-    </div>
-    
-    <div class="setting-group">
-      <label for="focusSites">Focus Sites (comma separated, e.g., docs.google.com,github.com):</label>
-      <textarea id="focusSites" placeholder="example.com&#10;anothersite.com" rows="4"></textarea>
-    </div>
-    
-    <button id="saveButton">Save Settings</button>
-    <div id="status"></div>
-  </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flowbar Settings</title>
+    <link rel="stylesheet" href="options.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="logo">
+          <span class="icon">⏱️</span>
+          <h1>Flowbar</h1>
+        </div>
+        <p class="tagline">Protect your focus, enhance your productivity</p>
+      </div>
 
-  <script src="options.js"></script>
-</body>
+      <div id="welcomeMessage" class="welcome-message">
+        <div class="welcome-icon">
+          <span class="icon">🎉</span>
+        </div>
+        <div class="welcome-content">
+          <h2>Welcome to Flowbar!</h2>
+          <p>
+            You're taking the first step towards protecting your focus and
+            creating a calm, sustainable relationship with your work.
+          </p>
+          <p>
+            Configure your settings below to customize your focus and break
+            sessions:
+          </p>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <h3>Time Settings</h3>
+        <div class="setting-group">
+          <div class="setting-header">
+            <span class="icon">⏳</span>
+            <label for="focusDuration">Focus Duration</label>
+          </div>
+          <div class="input-wrapper">
+            <div class="custom-input">
+              <input
+                type="number"
+                id="focusDuration"
+                min="1"
+                max="60"
+                value="25"
+              />
+              <div class="input-controls">
+                <button
+                  type="button"
+                  class="input-control-btn"
+                  id="focusDurationIncrease"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  class="input-control-btn"
+                  id="focusDurationDecrease"
+                >
+                  ▼
+                </button>
+              </div>
+            </div>
+
+            <span class="unit">minutes</span>
+            <div class="slider-container">
+              <input
+                type="range"
+                min="1"
+                max="60"
+                value="25"
+                class="slider"
+                id="focusDurationSlider"
+              />
+              <div class="slider-values">
+                <span>1</span>
+                <span>30</span>
+                <span>60</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-header">
+            <span class="icon">⏰</span>
+            <label for="breakDuration">Break Duration</label>
+          </div>
+          <div class="input-wrapper">
+            <div class="custom-input"><input
+              type="number"
+              id="breakDuration"
+              min="1"
+              max="30"
+              value="5"
+            />
+            <div class="input-controls">
+              <button
+                type="button"
+                class="input-control-btn"
+                id="breakDurationIncrease"
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                class="input-control-btn"
+                id="breakDurationDecrease"
+              >
+                ▼
+              </button>
+            </div></div>
+            
+            <span class="unit">minutes</span>
+            <div class="slider-container">
+              <input
+                type="range"
+                min="1"
+                max="30"
+                value="5"
+                class="slider"
+                id="breakDurationSlider"
+              />
+              <div class="slider-values">
+                <span>1</span>
+                <span>15</span>
+                <span>30</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <h3>Website Management</h3>
+        <div class="setting-group">
+          <div class="setting-header">
+            <span class="icon">🚫</span>
+            <label for="distractionSites">Distraction Sites</label>
+          </div>
+          <p class="setting-description">
+            Enter websites that distract you (one per line)
+          </p>
+          <textarea
+            id="distractionSites"
+            placeholder="twitter.com&#10;facebook.com&#10;instagram.com"
+            rows="3"
+          ></textarea>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-header">
+            <span class="icon">✅</span>
+            <label for="focusSites">Focus Sites</label>
+          </div>
+          <p class="setting-description">
+            Enter websites that help you focus (one per line)
+          </p>
+          <textarea
+            id="focusSites"
+            placeholder="docs.google.com&#10;github.com&#10;notion.so"
+            rows="3"
+          ></textarea>
+        </div>
+      </div>
+
+      <button id="saveButton">
+        <span class="icon">💾</span>
+        <span>Save Settings</span>
+      </button>
+      <div id="status"></div>
+
+      <footer>
+        <p>
+          Flowbar &copy; 2025 | <a href="#">Privacy Policy</a> |
+          <a href="#">Help</a>
+        </p>
+      </footer>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
 </html>
