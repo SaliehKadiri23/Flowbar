@@ -1,10 +1,60 @@
 // Flowbar Options Page Logic
 
 document.addEventListener('DOMContentLoaded', async () => {
+  await initializeTheme();
   await checkFirstInstall();
   await loadSettings();
   setupEventListeners();
   setupSliders();
+});
+
+/**
+ * Initialize theme from storage or system preference
+ */
+async function initializeTheme() {
+  try {
+    const result = await chrome.storage.sync.get(['theme']);
+    const savedTheme = result.theme;
+    
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    } else {
+      // Check system preference
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        await chrome.storage.sync.set({ theme: 'dark' });
+      } else {
+        document.documentElement.setAttribute('data-theme', 'light');
+        await chrome.storage.sync.set({ theme: 'light' });
+      }
+    }
+    
+    // Add theme toggle event listener
+    document.getElementById('themeToggle')?.addEventListener('click', async () => {
+      try {
+        // Toggle theme
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        
+        // Update DOM
+        document.documentElement.setAttribute('data-theme', newTheme);
+        
+        // Save to storage
+        await chrome.storage.sync.set({ theme: newTheme });
+      } catch (error) {
+        console.error("Flowbar options.js error handling theme toggle:", error);
+      }
+    });
+  } catch (error) {
+    console.error("Flowbar options.js error initializing theme:", error);
+  }
+}
+
+// Listen for theme changes from other parts of the extension
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'sync' && changes.theme) {
+    document.documentElement.setAttribute('data-theme', changes.theme.newValue);
+  }
 });
 
 /** 
@@ -144,32 +194,52 @@ async function saveSettings() {
       focusSites: focusSites
     });
     
-    // Show status message with icon
+    // Show toast notification with icon
     const status = document.getElementById('status');
-    status.innerHTML = '<span class="icon">✅</span> Settings saved successfully!';
+    status.innerHTML = '<div class="toast-icon"><span class="icon">✅</span></div><div class="toast-message">Settings saved successfully!</div>';
     status.className = 'status success';
     
-    // Add a subtle animation effect
+    // Add a subtle animation effect to button
     document.getElementById('saveButton').classList.add('saved');
+    
+    // Show the toast notification
+    setTimeout(() => {
+      status.classList.add('show');
+    }, 10);
     
     // Clear status after 2.5 seconds
     setTimeout(() => {
-      status.textContent = '';
-      status.className = 'status';
+      status.classList.remove('show');
       document.getElementById('saveButton').classList.remove('saved');
+      
+      // Reset status after animation completes
+      setTimeout(() => {
+        status.className = 'status';
+        status.innerHTML = '';
+      }, 300);
     }, 2500);
   } catch (error) {
     console.error("Flowbar options.js error saving settings:", error);
     
-    // Show error status with icon
+    // Show error toast notification with icon
     const status = document.getElementById('status');
-    status.innerHTML = '<span class="icon">❌</span> Error saving settings!';
+    status.innerHTML = '<div class="toast-icon"><span class="icon">❌</span></div><div class="toast-message">Error saving settings!</div>';
     status.className = 'status error';
+    
+    // Show the toast notification
+    setTimeout(() => {
+      status.classList.add('show');
+    }, 10);
     
     // Clear status after 3.5 seconds
     setTimeout(() => {
-      status.textContent = '';
-      status.className = 'status';
+      status.classList.remove('show');
+      
+      // Reset status after animation completes
+      setTimeout(() => {
+        status.className = 'status';
+        status.innerHTML = '';
+      }, 300);
     }, 3500);
     
     // Original timeout code - commented out to avoid duplicate
