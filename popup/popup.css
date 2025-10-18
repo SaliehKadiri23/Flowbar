@@ -82,7 +82,7 @@ body {
 }
 
 .theme-toggle .material-symbols-rounded {
-  font-size: 18px;
+  font-size: 22px;
   color: var(--text-color);
 }
 
@@ -155,7 +155,7 @@ body {
 }
 
 .settings-link .material-symbols-rounded {
-  font-size: 20px;
+  font-size: 24px;
 }
 
 /* Timer Card */
@@ -231,7 +231,7 @@ body {
 }
 
 .action-button .material-symbols-rounded {
-  font-size: 20px;
+  font-size: 24px;
 }
 
 /* Progress Ring */

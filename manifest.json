@@ -27,8 +27,14 @@
   "options_page": "options/options.html",
   "web_accessible_resources": [
     {
-      "resources": ["sanctuary.html", "sanctuary.js"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "sanctuary.html",
+        "sanctuary.js",
+        "fonts/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "content_security_policy": {
